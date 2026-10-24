@@ -8,7 +8,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Descargar repositorio
         uses: actions/checkout@v4
@@ -22,24 +21,20 @@ jobs:
       - name: Configurar Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Aceptar licencias Android
-        run: yes | sdkmanager --licenses
-
-      - name: Instalar componentes SDK
-        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Instalar SDK y aceptar licencias
+        run: |
+          yes | sdkmanager --licenses || true
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
       - name: Configurar Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
-      - name: Corregir acceso del servicio
-        run: sed -i 's/protected void onServiceConnected()/public void onServiceConnected()/' app/src/main/java/com/autoclicker/android/AutoClickService.java
-
       - name: Compilar APK
         run: gradle assembleDebug
 
-      - name: Publicar APK para descargar
+      - name: Publicar APK
         uses: actions/upload-artifact@v4
         with:
           name: AutoClicker-APK
