@@ -536,4 +536,48 @@ jobs:
                   resizeHandle.setTextColor(Color.BLACK);
                   resizeHandle.setPadding(8, 12, 8, 12);
                   resizeHandle.setBackgroundColor(0xFFE0E0E0);
+                                    resizeHandle.setOnTouchListener(new View.OnTouchListener() {
+                      private int startY;
+                      private int startHeight;
+
+                      @Override
+                      public boolean onTouch(View v, MotionEvent event) {
+                          switch (event.getAction()) {
+                              case MotionEvent.ACTION_DOWN:
+                                  startY = (int) event.getRawY();
+                                  startHeight = panelParams.height;
+                                  return true;
+
+                              case MotionEvent.ACTION_MOVE:
+                                  int delta = (int) event.getRawY() - startY;
+                                  panelParams.height = Math.max(200, startHeight + delta);
+                                  wm.updateViewLayout(panel, panelParams);
+                                  return true;
+                          }
+                          return true;
+                      }
+                  });
+
+                  panel.addView(resizeHandle);
+                  wm.addView(panel, panelParams);
+              }
+
+              private void rowButton(String text, Runnable action) {
+                  Button button = new Button(this);
+                  button.setText(text);
+                  button.setOnClickListener(v -> action.run());
+                  content.addView(button);
+              }
+
+              @Override
+              public void onDestroy() {
+                  handler.removeCallbacksAndMessages(null);
+                  if (wm != null) {
+                      if (panel != null) wm.removeView(panel);
+                      if (marker != null) wm.removeView(marker);
+                  }
+                  super.onDestroy();
+              }
+          }
+          EOF
         
