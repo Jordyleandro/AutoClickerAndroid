@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">AutoClickerNuevo</string>
+    <string name="accessibility_description">Servicio de clics mediante gestos autorizados.</string>
+</resources>
