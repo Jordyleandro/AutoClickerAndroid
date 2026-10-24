@@ -89,7 +89,7 @@ public class FloatingPanelService extends Service {
         panel.addView(speedLabel);
 
         SeekBar speed = new SeekBar(this);
-        speed.setMax(19);
+        speed.setMax(499);
         speed.setProgress(9);
         speed.setOnSeekBarChangeListener(
             new SeekBar.OnSeekBarChangeListener() {
