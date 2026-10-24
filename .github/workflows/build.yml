@@ -1,3 +1,4 @@
+
 name: AutoClickerNuevo APK
 
 on:
@@ -268,7 +269,6 @@ jobs:
           import android.os.Handler;
           import android.os.IBinder;
           import android.provider.Settings;
-          import android.util.DisplayMetrics;
           import android.view.Gravity;
           import android.view.MotionEvent;
           import android.view.View;
@@ -298,7 +298,6 @@ jobs:
               private boolean running = false;
               private int clicks = 0;
 
-              // X e Y representan el CENTRO del punto.
               private int x = 300;
               private int y = 500;
 
@@ -357,10 +356,8 @@ jobs:
                   marker.setOnTouchListener((v, e) -> {
                       if (e.getAction() == MotionEvent.ACTION_DOWN) {
                           v.setTag(new float[]{
-                              e.getRawX(),
-                              e.getRawY(),
-                              markerParams.x,
-                              markerParams.y
+                              e.getRawX(), e.getRawY(),
+                              markerParams.x, markerParams.y
                           });
                           return true;
                       }
@@ -371,7 +368,6 @@ jobs:
                           markerParams.x = (int) (
                               a[2] + e.getRawX() - a[0]
                           );
-
                           markerParams.y = (int) (
                               a[3] + e.getRawY() - a[1]
                           );
@@ -381,7 +377,6 @@ jobs:
 
                           wm.updateViewLayout(marker, markerParams);
                           syncCoordinates();
-
                           return true;
                       }
 
@@ -413,7 +408,6 @@ jobs:
                       markerParams.height = markerSize;
                       markerParams.x = x - markerSize / 2;
                       markerParams.y = y - markerSize / 2;
-
                       wm.updateViewLayout(marker, markerParams);
                   }
 
@@ -432,7 +426,6 @@ jobs:
                   title.setTextSize(18);
                   title.setPadding(4, 8, 4, 8);
                   title.setOnTouchListener(dragPanel());
-
                   panel.addView(title);
 
                   scrollView = new ScrollView(this);
@@ -440,13 +433,10 @@ jobs:
 
                   content = new LinearLayout(this);
                   content.setOrientation(LinearLayout.VERTICAL);
-
                   scrollView.addView(content);
 
                   panel.addView(scrollView, new LinearLayout.LayoutParams(
-                      LinearLayout.LayoutParams.MATCH_PARENT,
-                      0,
-                      1
+                      LinearLayout.LayoutParams.MATCH_PARENT, 0, 1
                   ));
 
                   xInput = field("Coordenada X", String.valueOf(x));
@@ -484,6 +474,7 @@ jobs:
                   sizeSeekBar = new SeekBar(this);
                   sizeSeekBar.setMax(100);
                   sizeSeekBar.setProgress(markerSize - 20);
+                  sizeLabel.setText("Tamaño del punto: " + markerSize + " px");
 
                   sizeSeekBar.setOnSeekBarChangeListener(
                       new SeekBar.OnSeekBarChangeListener() {
@@ -495,10 +486,7 @@ jobs:
                               sizeLabel.setText(
                                   "Tamaño del punto: " + newSize + " px"
                               );
-
-                              if (fromUser) {
-                                  updateMarkerSize(newSize);
-                              }
+                              if (fromUser) updateMarkerSize(newSize);
                           }
 
                           @Override
@@ -508,11 +496,11 @@ jobs:
                           public void onStopTrackingTouch(SeekBar seekBar) {}
                       }
                   );
-
                   content.addView(sizeSeekBar);
 
                   transparencyLabel = new TextView(this);
                   transparencyLabel.setTextColor(Color.BLACK);
+                  transparencyLabel.setText("Transparencia: " + transparency + "%");
                   content.addView(transparencyLabel);
 
                   transparencySeekBar = new SeekBar(this);
@@ -526,11 +514,9 @@ jobs:
                               SeekBar seekBar, int progress, boolean fromUser
                           ) {
                               transparency = progress;
-
                               transparencyLabel.setText(
                                   "Transparencia: " + transparency + "%"
                               );
-
                               updateMarkerAppearance();
                           }
 
@@ -541,7 +527,6 @@ jobs:
                           public void onStopTrackingTouch(SeekBar seekBar) {}
                       }
                   );
-
                   content.addView(transparencySeekBar);
 
                   rowButton("CERRAR PANEL", this::stopSelf);
@@ -549,4 +534,6 @@ jobs:
                   resizeHandle = new TextView(this);
                   resizeHandle.setText("◢ Arrastra aquí para cambiar tamaño");
                   resizeHandle.setTextColor(Color.BLACK);
-          
+                  resizeHandle.setPadding(8, 12, 8, 12);
+                  resizeHandle.setBackgroundColor(0xFFE0E0E0);
+        
