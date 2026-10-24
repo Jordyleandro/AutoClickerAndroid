@@ -32,7 +32,7 @@ jobs:
           gradle-version: '8.9'
 
       - name: Compilar APK
-        run: gradle assembleDebug
+        run: gradle :app:assembleDebug
 
       - name: Publicar APK
         uses: actions/upload-artifact@v4
