@@ -1,3 +1,4 @@
+
 package com.autoclicker.android;
 
 import android.accessibilityservice.AccessibilityService;
@@ -11,13 +12,17 @@ import android.widget.Toast;
 
 public class AutoClickService extends AccessibilityService {
 
+    private static final String TAG = "AutoClicker";
+
     private static AutoClickService instance;
 
-    private final Handler handler = new Handler(Looper.getMainLooper());
+    private final Handler handler =
+            new Handler(Looper.getMainLooper());
 
     private int clickX = 500;
     private int clickY = 500;
     private long interval = 200;
+
     private boolean clicking = false;
     private boolean gesturePending = false;
 
@@ -26,9 +31,11 @@ public class AutoClickService extends AccessibilityService {
     }
 
     @Override
-    public void onServiceConnected() {
+    protected void onServiceConnected() {
         super.onServiceConnected();
         instance = this;
+
+        Log.i(TAG, "Servicio de accesibilidad conectado");
 
         Toast.makeText(
                 this,
@@ -38,8 +45,8 @@ public class AutoClickService extends AccessibilityService {
     }
 
     public void setPosition(int x, int y) {
-        clickX = x;
-        clickY = y;
+        clickX = Math.max(1, x);
+        clickY = Math.max(1, y);
     }
 
     public void setInterval(long milliseconds) {
@@ -48,26 +55,29 @@ public class AutoClickService extends AccessibilityService {
 
     public void startClicks() {
         if (instance != this) {
-            Toast.makeText(
-                    this,
-                    "Servicio de accesibilidad desconectado",
-                    Toast.LENGTH_LONG
-            ).show();
+            Log.e(TAG, "La instancia del servicio no coincide");
             return;
         }
 
         if (clicking) {
+            Log.i(TAG, "Los clics ya están iniciados");
             return;
         }
 
         clicking = true;
         gesturePending = false;
+
+        Log.i(TAG, "Inicio: X=" + clickX
+                + ", Y=" + clickY
+                + ", intervalo=" + interval);
+
         handler.post(clickRunnable);
     }
 
     public void stopClicks() {
         clicking = false;
         handler.removeCallbacks(clickRunnable);
+        Log.i(TAG, "Clics detenidos");
     }
 
     private final Runnable clickRunnable = new Runnable() {
@@ -79,14 +89,10 @@ public class AutoClickService extends AccessibilityService {
 
             Path path = new Path();
             path.moveTo(clickX, clickY);
-            path.lineTo(clickX + 1, clickY + 1);
 
             GestureDescription.StrokeDescription stroke =
                     new GestureDescription.StrokeDescription(
-                            path,
-                            0,
-                            100
-                    );
+                            path, 0, 100);
 
             GestureDescription gesture =
                     new GestureDescription.Builder()
@@ -102,7 +108,8 @@ public class AutoClickService extends AccessibilityService {
                         public void onCompleted(
                                 GestureDescription description) {
                             gesturePending = false;
-                            Log.d("AutoClicker", "Gesto completado");
+                            Log.i(TAG, "GESTO COMPLETADO en X="
+                                    + clickX + ", Y=" + clickY);
                             scheduleNext();
                         }
 
@@ -110,7 +117,7 @@ public class AutoClickService extends AccessibilityService {
                         public void onCancelled(
                                 GestureDescription description) {
                             gesturePending = false;
-                            Log.e("AutoClicker", "Gesto cancelado");
+                            Log.e(TAG, "GESTO CANCELADO");
                             scheduleNext();
                         }
                     },
@@ -119,7 +126,7 @@ public class AutoClickService extends AccessibilityService {
 
             if (!accepted) {
                 gesturePending = false;
-                Log.e("AutoClicker", "Gesto rechazado por Android");
+                Log.e(TAG, "ANDROID RECHAZÓ EL GESTO");
                 scheduleNext();
             }
         }
