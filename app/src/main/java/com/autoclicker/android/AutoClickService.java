@@ -5,12 +5,14 @@ import android.accessibilityservice.GestureDescription;
 import android.graphics.Path;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Log;
 import android.view.accessibility.AccessibilityEvent;
 import android.widget.Toast;
 
 public class AutoClickService extends AccessibilityService {
 
     private static AutoClickService instance;
+
     private final Handler handler = new Handler(Looper.getMainLooper());
 
     private int clickX = 500;
@@ -27,7 +29,8 @@ public class AutoClickService extends AccessibilityService {
     public void onServiceConnected() {
         super.onServiceConnected();
         instance = this;
-        Toast.makeText(this, "AutoClicker conectado", Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, "Servicio de clics conectado",
+                Toast.LENGTH_SHORT).show();
     }
 
     public void setPosition(int x, int y) {
@@ -36,24 +39,25 @@ public class AutoClickService extends AccessibilityService {
     }
 
     public void setInterval(long milliseconds) {
-        interval = Math.max(50, milliseconds);
+        interval = Math.max(100, milliseconds);
     }
 
     public void startClicks() {
-        if (clicking) return;
-
         if (instance == null) {
-            Toast.makeText(this, "Activa el servicio de accesibilidad", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "Servicio no conectado",
+                    Toast.LENGTH_LONG).show();
             return;
         }
 
+        if (clicking) return;
+
         clicking = true;
+        gesturePending = false;
         handler.post(clickRunnable);
     }
 
     public void stopClicks() {
         clicking = false;
-        gesturePending = false;
         handler.removeCallbacks(clickRunnable);
     }
 
@@ -67,8 +71,9 @@ public class AutoClickService extends AccessibilityService {
 
             GestureDescription gesture =
                     new GestureDescription.Builder()
-                            .addStroke(new GestureDescription.StrokeDescription(
-                                    path, 0, 50))
+                            .addStroke(
+                                    new GestureDescription.StrokeDescription(
+                                            path, 0, 100))
                             .build();
 
             gesturePending = true;
@@ -77,32 +82,37 @@ public class AutoClickService extends AccessibilityService {
                     gesture,
                     new GestureResultCallback() {
                         @Override
-                        public void onCompleted(GestureDescription description) {
+                        public void onCompleted(
+                                GestureDescription description) {
                             gesturePending = false;
-                            if (clicking) {
-                                handler.postDelayed(clickRunnable, interval);
-                            }
+                            Log.d("AutoClicker", "Gesto completado");
+                            scheduleNext();
                         }
 
                         @Override
-                        public void onCancelled(GestureDescription description) {
+                        public void onCancelled(
+                                GestureDescription description) {
                             gesturePending = false;
-                            if (clicking) {
-                                handler.postDelayed(clickRunnable, interval);
-                            }
+                            Log.w("AutoClicker", "Gesto cancelado");
+                            scheduleNext();
                         }
                     },
-                    null
+                    handler
             );
 
             if (!accepted) {
                 gesturePending = false;
-                if (clicking) {
-                    handler.postDelayed(this, interval);
-                }
+                Log.e("AutoClicker", "Android rechazó el gesto");
+                scheduleNext();
             }
         }
     };
+
+    private void scheduleNext() {
+        if (clicking) {
+            handler.postDelayed(clickRunnable, interval);
+        }
+    }
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
@@ -116,7 +126,9 @@ public class AutoClickService extends AccessibilityService {
     @Override
     public void onDestroy() {
         stopClicks();
-        if (instance == this) instance = null;
+        if (instance == this) {
+            instance = null;
+        }
         super.onDestroy();
     }
 }
