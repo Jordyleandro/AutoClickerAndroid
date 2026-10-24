@@ -6,6 +6,7 @@ import android.graphics.Path;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.accessibility.AccessibilityEvent;
+import android.widget.Toast;
 
 public class AutoClickService extends AccessibilityService {
 
@@ -16,6 +17,7 @@ public class AutoClickService extends AccessibilityService {
     private int clickY = 500;
     private long interval = 100;
     private boolean clicking = false;
+    private boolean gesturePending = false;
 
     public static AutoClickService getInstance() {
         return instance;
@@ -25,6 +27,7 @@ public class AutoClickService extends AccessibilityService {
     public void onServiceConnected() {
         super.onServiceConnected();
         instance = this;
+        Toast.makeText(this, "AutoClicker conectado", Toast.LENGTH_SHORT).show();
     }
 
     public void setPosition(int x, int y) {
@@ -33,67 +36,70 @@ public class AutoClickService extends AccessibilityService {
     }
 
     public void setInterval(long milliseconds) {
-        interval = Math.max(1, milliseconds);
+        interval = Math.max(50, milliseconds);
     }
 
     public void startClicks() {
         if (clicking) return;
+
+        if (instance == null) {
+            Toast.makeText(this, "Activa el servicio de accesibilidad", Toast.LENGTH_LONG).show();
+            return;
+        }
+
         clicking = true;
         handler.post(clickRunnable);
     }
 
     public void stopClicks() {
         clicking = false;
+        gesturePending = false;
         handler.removeCallbacks(clickRunnable);
-    }
-
-    private void scheduleNext() {
-        if (clicking) {
-            handler.postDelayed(
-                clickRunnable, Math.max(1, interval - 10)
-            );
-        }
     }
 
     private final Runnable clickRunnable = new Runnable() {
         @Override
         public void run() {
-            if (!clicking) return;
+            if (!clicking || gesturePending) return;
 
             Path path = new Path();
             path.moveTo(clickX, clickY);
 
             GestureDescription gesture =
-                new GestureDescription.Builder()
-                    .addStroke(
-                        new GestureDescription.StrokeDescription(
-                            path, 0, 10
-                        )
-                    )
-                    .build();
+                    new GestureDescription.Builder()
+                            .addStroke(new GestureDescription.StrokeDescription(
+                                    path, 0, 50))
+                            .build();
+
+            gesturePending = true;
 
             boolean accepted = dispatchGesture(
-                gesture,
-                new GestureResultCallback() {
-                    @Override
-                    public void onCompleted(
-                        GestureDescription gestureDescription
-                    ) {
-                        scheduleNext();
-                    }
+                    gesture,
+                    new GestureResultCallback() {
+                        @Override
+                        public void onCompleted(GestureDescription description) {
+                            gesturePending = false;
+                            if (clicking) {
+                                handler.postDelayed(clickRunnable, interval);
+                            }
+                        }
 
-                    @Override
-                    public void onCancelled(
-                        GestureDescription gestureDescription
-                    ) {
-                        scheduleNext();
-                    }
-                },
-                null
+                        @Override
+                        public void onCancelled(GestureDescription description) {
+                            gesturePending = false;
+                            if (clicking) {
+                                handler.postDelayed(clickRunnable, interval);
+                            }
+                        }
+                    },
+                    null
             );
 
-            if (!accepted && clicking) {
-                handler.postDelayed(this, interval);
+            if (!accepted) {
+                gesturePending = false;
+                if (clicking) {
+                    handler.postDelayed(this, interval);
+                }
             }
         }
     };
@@ -110,7 +116,7 @@ public class AutoClickService extends AccessibilityService {
     @Override
     public void onDestroy() {
         stopClicks();
-        instance = null;
+        if (instance == this) instance = null;
         super.onDestroy();
     }
-    }
+}
