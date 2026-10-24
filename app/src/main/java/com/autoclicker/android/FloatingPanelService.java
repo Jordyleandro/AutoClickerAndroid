@@ -96,7 +96,7 @@ public class FloatingPanelService extends Service {
             }
 
             updateClickPosition();
-            s.setInterval(1000L / clicksPerSecond);
+            s.setInterval(Math.max(5, 1000L / clicksPerSecond));
             s.startClicks();
 
             Toast.makeText(this,
@@ -112,6 +112,7 @@ public class FloatingPanelService extends Service {
             if (s != null) {
                 s.stopClicks();
             }
+
             Toast.makeText(this,
                     "Clics detenidos",
                     Toast.LENGTH_SHORT).show();
@@ -124,20 +125,25 @@ public class FloatingPanelService extends Service {
         panel.addView(speedLabel);
 
         SeekBar speed = new SeekBar(this);
-        speed.setMax(19);
+        speed.setMax(199);
         speed.setProgress(9);
+
         speed.setOnSeekBarChangeListener(
                 new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(
                     SeekBar b, int p, boolean user) {
+
                 clicksPerSecond = p + 1;
+
                 speedLabel.setText(
-                        "Velocidad: " + clicksPerSecond + " clics/seg");
+                        "Velocidad: " + clicksPerSecond
+                                + " clics/seg");
 
                 AutoClickService s = AutoClickService.getInstance();
                 if (s != null) {
-                    s.setInterval(1000L / clicksPerSecond);
+                    s.setInterval(
+                            Math.max(5, 1000L / clicksPerSecond));
                 }
             }
 
@@ -157,11 +163,13 @@ public class FloatingPanelService extends Service {
         SeekBar size = new SeekBar(this);
         size.setMax(100);
         size.setProgress(28);
+
         size.setOnSeekBarChangeListener(
                 new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(
                     SeekBar b, int p, boolean user) {
+
                 markerSize = p + 20;
 
                 if (marker != null && markerParams != null) {
@@ -230,7 +238,9 @@ public class FloatingPanelService extends Service {
         int x = markerParams.x + markerSize / 2;
         int y = markerParams.y + markerSize / 2;
 
-        coordinatesLabel.setText("X: " + x + " | Y: " + y);
+        if (coordinatesLabel != null) {
+            coordinatesLabel.setText("X: " + x + " | Y: " + y);
+        }
 
         AutoClickService s = AutoClickService.getInstance();
         if (s != null) {
@@ -242,7 +252,10 @@ public class FloatingPanelService extends Service {
             View view, WindowManager.LayoutParams params) {
 
         view.setOnTouchListener(new View.OnTouchListener() {
-            private int startX, startY, originalX, originalY;
+            private int startX;
+            private int startY;
+            private int originalX;
+            private int originalY;
 
             @Override
             public boolean onTouch(View v, MotionEvent event) {
