@@ -3,9 +3,9 @@ package com.autoclicker.android;
 import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.GestureDescription;
 import android.graphics.Path;
-import android.view.accessibility.AccessibilityEvent;
 import android.os.Handler;
 import android.os.Looper;
+import android.view.accessibility.AccessibilityEvent;
 
 public class AutoClickService extends AccessibilityService {
 
@@ -47,6 +47,14 @@ public class AutoClickService extends AccessibilityService {
         handler.removeCallbacks(clickRunnable);
     }
 
+    private void scheduleNext() {
+        if (clicking) {
+            handler.postDelayed(
+                clickRunnable, Math.max(1, interval - 10)
+            );
+        }
+    }
+
     private final Runnable clickRunnable = new Runnable() {
         @Override
         public void run() {
@@ -56,14 +64,37 @@ public class AutoClickService extends AccessibilityService {
             path.moveTo(clickX, clickY);
 
             GestureDescription gesture =
-                    new GestureDescription.Builder()
-                            .addStroke(
-                                    new GestureDescription.StrokeDescription(
-                                            path, 0, 50))
-                            .build();
+                new GestureDescription.Builder()
+                    .addStroke(
+                        new GestureDescription.StrokeDescription(
+                            path, 0, 10
+                        )
+                    )
+                    .build();
 
-            dispatchGesture(gesture, null, null);
-            handler.postDelayed(this, interval);
+            boolean accepted = dispatchGesture(
+                gesture,
+                new GestureResultCallback() {
+                    @Override
+                    public void onCompleted(
+                        GestureDescription gestureDescription
+                    ) {
+                        scheduleNext();
+                    }
+
+                    @Override
+                    public void onCancelled(
+                        GestureDescription gestureDescription
+                    ) {
+                        scheduleNext();
+                    }
+                },
+                null
+            );
+
+            if (!accepted && clicking) {
+                handler.postDelayed(this, interval);
+            }
         }
     };
 
@@ -82,4 +113,4 @@ public class AutoClickService extends AccessibilityService {
         instance = null;
         super.onDestroy();
     }
-}
+    }
