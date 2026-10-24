@@ -17,7 +17,7 @@ public class AutoClickService extends AccessibilityService {
 
     private int clickX = 500;
     private int clickY = 500;
-    private long interval = 100;
+    private long interval = 200;
     private boolean clicking = false;
     private boolean gesturePending = false;
 
@@ -29,8 +29,12 @@ public class AutoClickService extends AccessibilityService {
     public void onServiceConnected() {
         super.onServiceConnected();
         instance = this;
-        Toast.makeText(this, "Servicio de clics conectado",
-                Toast.LENGTH_SHORT).show();
+
+        Toast.makeText(
+                this,
+                "Servicio AutoClicker conectado",
+                Toast.LENGTH_SHORT
+        ).show();
     }
 
     public void setPosition(int x, int y) {
@@ -43,13 +47,18 @@ public class AutoClickService extends AccessibilityService {
     }
 
     public void startClicks() {
-        if (instance == null) {
-            Toast.makeText(this, "Servicio no conectado",
-                    Toast.LENGTH_LONG).show();
+        if (instance != this) {
+            Toast.makeText(
+                    this,
+                    "Servicio de accesibilidad desconectado",
+                    Toast.LENGTH_LONG
+            ).show();
             return;
         }
 
-        if (clicking) return;
+        if (clicking) {
+            return;
+        }
 
         clicking = true;
         gesturePending = false;
@@ -64,16 +73,24 @@ public class AutoClickService extends AccessibilityService {
     private final Runnable clickRunnable = new Runnable() {
         @Override
         public void run() {
-            if (!clicking || gesturePending) return;
+            if (!clicking || gesturePending) {
+                return;
+            }
 
             Path path = new Path();
             path.moveTo(clickX, clickY);
+            path.lineTo(clickX + 1, clickY + 1);
+
+            GestureDescription.StrokeDescription stroke =
+                    new GestureDescription.StrokeDescription(
+                            path,
+                            0,
+                            100
+                    );
 
             GestureDescription gesture =
                     new GestureDescription.Builder()
-                            .addStroke(
-                                    new GestureDescription.StrokeDescription(
-                                            path, 0, 100))
+                            .addStroke(stroke)
                             .build();
 
             gesturePending = true;
@@ -93,7 +110,7 @@ public class AutoClickService extends AccessibilityService {
                         public void onCancelled(
                                 GestureDescription description) {
                             gesturePending = false;
-                            Log.w("AutoClicker", "Gesto cancelado");
+                            Log.e("AutoClicker", "Gesto cancelado");
                             scheduleNext();
                         }
                     },
@@ -102,7 +119,7 @@ public class AutoClickService extends AccessibilityService {
 
             if (!accepted) {
                 gesturePending = false;
-                Log.e("AutoClicker", "Android rechazó el gesto");
+                Log.e("AutoClicker", "Gesto rechazado por Android");
                 scheduleNext();
             }
         }
@@ -126,9 +143,11 @@ public class AutoClickService extends AccessibilityService {
     @Override
     public void onDestroy() {
         stopClicks();
+
         if (instance == this) {
             instance = null;
         }
+
         super.onDestroy();
     }
 }
