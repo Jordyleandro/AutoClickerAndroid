@@ -1,364 +1,501 @@
-package com.autoclicker.android;
+name: AutoClickerNuevo APK
 
-import android.app.Service;
-import android.content.Intent;
-import android.graphics.Color;
-import android.graphics.PixelFormat;
-import android.graphics.drawable.GradientDrawable;
-import android.os.Build;
-import android.os.Handler;
-import android.os.IBinder;
-import android.provider.Settings;
-import android.view.Gravity;
-import android.view.MotionEvent;
-import android.view.View;
-import android.view.WindowManager;
-import android.view.inputmethod.InputMethodManager;
-import android.content.Context;
-import android.widget.Button;
-import android.widget.EditText;
-import android.widget.LinearLayout;
-import android.widget.ScrollView;
-import android.widget.SeekBar;
-import android.widget.TextView;
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
 
-public class FloatingPanelService extends Service {
-    private WindowManager wm;
-    private WindowManager.LayoutParams panelParams, markerParams;
-    private LinearLayout panel, content;
-    private TextView counter, status, sizeLabel, alphaLabel;
-    private View marker, resizeHandle;
-    private EditText xInput, yInput, intervalInput;
-    private SeekBar sizeSeek, alphaSeek;
-    private final Handler handler = new Handler();
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
 
-    private boolean running = false;
-    private int clicks = 0;
-    private int x = 300, y = 500;
-    private int markerSize = 40;
-    private int markerAlpha = 190;
-    private int panelWidth = 300, panelHeight = 560;
-    private Runnable clickTask;
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
 
-    @Override
-    public IBinder onBind(Intent intent) {
-        return null;
-    }
+      - name: Configurar Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
 
-    @Override
-    public void onCreate() {
-        super.onCreate();
+      - name: Configurar Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
 
-        if (!Settings.canDrawOverlays(this)) {
-            stopSelf();
-            return;
-        }
+      - name: Preparar Android SDK
+        shell: bash
+        run: |
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f | head -n 1)"
+          if [ -z "$SDKMANAGER" ]; then
+            echo "No se encontró sdkmanager"
+            exit 1
+          fi
+          yes | "$SDKMANAGER" --licenses || true
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0"
 
-        wm = (WindowManager) getSystemService(WINDOW_SERVICE);
-        createMarker();
-        createPanel();
-    }
+      - name: Crear proyecto Android
+        shell: bash
+        run: |
+          mkdir -p app/src/main/java/com/autoclicker/android
+          mkdir -p app/src/main/res/xml
+          mkdir -p app/src/main/res/values
 
-    private int overlayType() {
-        return Build.VERSION.SDK_INT >= 26
-            ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-            : WindowManager.LayoutParams.TYPE_PHONE;
-    }
+          cat > settings.gradle <<'EOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = "AutoClickerNuevo"
+          include(":app")
+          EOF
 
-    private void createMarker() {
-        marker = new View(this);
-        updateMarkerAppearance();
+          cat > build.gradle <<'EOF'
+          plugins {
+              id 'com.android.application' version '8.6.1' apply false
+          }
+          EOF
 
-        markerParams = new WindowManager.LayoutParams(
-            markerSize, markerSize,
-            overlayType(),
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
-            PixelFormat.TRANSLUCENT
-        );
+          cat > gradle.properties <<'EOF'
+          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+          android.useAndroidX=true
+          EOF
 
-        markerParams.gravity = Gravity.TOP | Gravity.START;
-        markerParams.x = x - markerSize / 2;
-        markerParams.y = y - markerSize / 2;
+          cat > app/build.gradle <<'EOF'
+          plugins {
+              id 'com.android.application'
+          }
+          android {
+              namespace 'com.autoclicker.android'
+              compileSdk 35
+              defaultConfig {
+                  applicationId 'com.autoclicker.android'
+                  minSdk 24
+                  targetSdk 28
+                  versionCode 1
+                  versionName '1.0'
+              }
+          }
+          EOF
 
-        marker.setOnTouchListener((v, e) -> {
-            if (e.getAction() == MotionEvent.ACTION_DOWN) {
-                v.setTag(new float[]{
-                    e.getRawX(), e.getRawY(),
-                    markerParams.x, markerParams.y
-                });
-                return true;
-            }
+          cat > app/src/main/AndroidManifest.xml <<'EOF'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
+              <application
+                  android:theme="@android:style/Theme.Material.Light.NoActionBar"
+                  android:label="AutoClickerNuevo"
+                  android:allowBackup="false">
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN"/>
+                          <category android:name="android.intent.category.LAUNCHER"/>
+                      </intent-filter>
+                  </activity>
+                  <service
+                      android:name=".AutoClickService"
+                      android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+                      android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.accessibilityservice.AccessibilityService"/>
+                      </intent-filter>
+                      <meta-data
+                          android:name="android.accessibilityservice"
+                          android:resource="@xml/accessibility_service_config"/>
+                  </service>
+                  <service
+                      android:name=".FloatingPanelService"
+                      android:exported="false"/>
+              </application>
+          </manifest>
+          EOF
 
-            if (e.getAction() == MotionEvent.ACTION_MOVE) {
-                float[] a = (float[]) v.getTag();
+          cat > app/src/main/res/xml/accessibility_service_config.xml <<'EOF'
+          <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+              android:description="@string/accessibility_description"
+              android:accessibilityEventTypes="typeAllMask"
+              android:accessibilityFeedbackType="feedbackGeneric"
+              android:canPerformGestures="true"
+              android:notificationTimeout="50"/>
+          EOF
 
-                markerParams.x = (int) (a[2] + e.getRawX() - a[0]);
-                markerParams.y = (int) (a[3] + e.getRawY() - a[1]);
+          cat > app/src/main/res/values/strings.xml <<'EOF'
+          <resources>
+              <string name="accessibility_description">Servicio de clics controlado por el usuario.</string>
+          </resources>
+          EOF
 
-                x = markerParams.x + markerSize / 2;
-                y = markerParams.y + markerSize / 2;
+          cat > app/src/main/java/com/autoclicker/android/MainActivity.java <<'EOF'
+          package com.autoclicker.android;
 
-                wm.updateViewLayout(marker, markerParams);
-                syncCoordinates();
-                return true;
-            }
+          import android.app.Activity;
+          import android.app.AlertDialog;
+          import android.content.Intent;
+          import android.net.Uri;
+          import android.os.Bundle;
+          import android.provider.Settings;
+          import android.view.Gravity;
+          import android.widget.Button;
+          import android.widget.LinearLayout;
+          import android.widget.TextView;
 
-            return e.getAction() == MotionEvent.ACTION_UP;
-        });
+          public class MainActivity extends Activity {
+              @Override
+              public void onCreate(Bundle b) {
+                  super.onCreate(b);
+                  LinearLayout l = new LinearLayout(this);
+                  l.setOrientation(LinearLayout.VERTICAL);
+                  l.setPadding(24, 30, 24, 24);
+                  l.setGravity(Gravity.CENTER_HORIZONTAL);
 
-        wm.addView(marker, markerParams);
-    }
+                  TextView title = new TextView(this);
+                  title.setText("AutoClickerNuevo");
+                  title.setTextSize(25);
+                  l.addView(title);
 
-    private void updateMarkerAppearance() {
-        GradientDrawable circle = new GradientDrawable();
-        circle.setShape(GradientDrawable.OVAL);
-        circle.setColor(Color.RED);
-        circle.setAlpha(markerAlpha);
-        circle.setStroke(2, Color.argb(
-            Math.min(255, markerAlpha + 40), 150, 0, 0
-        ));
-        marker.setBackground(circle);
-    }
+                  add(l, "1. Permitir panel flotante", () -> {
+                      if (!Settings.canDrawOverlays(this)) {
+                          startActivity(new Intent(
+                              Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                              Uri.parse("package:" + getPackageName())));
+                      }
+                  });
 
-    private void createPanel() {
-        panel = new LinearLayout(this);
-        panel.setOrientation(LinearLayout.VERTICAL);
-        panel.setPadding(8, 6, 8, 6);
-        panel.setBackgroundColor(Color.WHITE);
+                  add(l, "2. Activar accesibilidad", () ->
+                      startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
 
-        TextView title = new TextView(this);
-        title.setText("AutoClicker  ☰");
-        title.setTextColor(Color.BLACK);
-        title.setTextSize(18);
-        title.setPadding(5, 8, 5, 8);
-        title.setOnTouchListener(dragPanel());
-        panel.addView(title);
+                  add(l, "3. Abrir panel flotante", () -> {
+                      if (Settings.canDrawOverlays(this)) {
+                          startService(new Intent(this, FloatingPanelService.class));
+                      } else {
+                          new AlertDialog.Builder(this)
+                              .setMessage("Primero permite el panel flotante.")
+                              .setPositiveButton("Aceptar", null)
+                              .show();
+                      }
+                  });
 
-        ScrollView scroll = new ScrollView(this);
-        content = new LinearLayout(this);
-        content.setOrientation(LinearLayout.VERTICAL);
-        scroll.addView(content);
-        panel.addView(scroll, new LinearLayout.LayoutParams(
-            -1, 0, 1
-        ));
+                  setContentView(l);
+              }
 
-        xInput = field("Coordenada X", String.valueOf(x));
-        yInput = field("Coordenada Y", String.valueOf(y));
-        intervalInput = field("Intervalo en ms (mín. 10)", "100");
+              private void add(LinearLayout l, String label, Runnable action) {
+                  Button b = new Button(this);
+                  b.setText(label);
+                  l.addView(b, new LinearLayout.LayoutParams(-1, -2));
+                  b.setOnClickListener(v -> action.run());
+              }
+          }
+          EOF
 
-        rowButton("APLICAR COORDENADAS", () -> {
-            x = number(xInput, x);
-            y = number(yInput, y);
+          cat > app/src/main/java/com/autoclicker/android/AutoClickService.java <<'EOF'
+          package com.autoclicker.android;
 
-            markerParams.x = x - markerSize / 2;
-            markerParams.y = y - markerSize / 2;
+          import android.accessibilityservice.AccessibilityService;
+          import android.accessibilityservice.GestureDescription;
+          import android.graphics.Path;
+          import android.view.accessibility.AccessibilityEvent;
 
-            wm.updateViewLayout(marker, markerParams);
-            status.setText("Punto actualizado");
-        });
+          public class AutoClickService extends AccessibilityService {
+              private static AutoClickService instance;
 
-        sizeLabel = label("Tamaño del punto: " + markerSize);
-        sizeSeek = new SeekBar(this);
-        sizeSeek.setMax(96);
-        sizeSeek.setProgress(markerSize - 8);
-        content.addView(sizeSeek);
-        sizeSeek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override
-            public void onProgressChanged(SeekBar bar, int progress, boolean user) {
-                markerSize = progress + 8;
-                sizeLabel.setText("Tamaño del punto: " + markerSize);
-                markerParams.width = markerSize;
-                markerParams.height = markerSize;
-                markerParams.x = x - markerSize / 2;
-                markerParams.y = y - markerSize / 2;
-                updateMarkerAppearance();
-                wm.updateViewLayout(marker, markerParams);
-            }
-            @Override public void onStartTrackingTouch(SeekBar bar) {}
-            @Override public void onStopTrackingTouch(SeekBar bar) {}
-        });
+              @Override
+              protected void onServiceConnected() {
+                  super.onServiceConnected();
+                  instance = this;
+              }
 
-        alphaLabel = label("Opacidad: " + (markerAlpha * 100 / 255) + "%");
-        alphaSeek = new SeekBar(this);
-        alphaSeek.setMax(255);
-        alphaSeek.setProgress(markerAlpha);
-        content.addView(alphaSeek);
-        alphaSeek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override
-            public void onProgressChanged(SeekBar bar, int progress, boolean user) {
-                markerAlpha = progress;
-                alphaLabel.setText("Opacidad: " + (progress * 100 / 255) + "%");
-                updateMarkerAppearance();
-            }
-            @Override public void onStartTrackingTouch(SeekBar bar) {}
-            @Override public void onStopTrackingTouch(SeekBar bar) {}
-        });
+              public static boolean click(float x, float y) {
+                  if (instance == null) return false;
+                  Path path = new Path();
+                  path.moveTo(x, y);
+                  GestureDescription gesture =
+                      new GestureDescription.Builder()
+                          .addStroke(new GestureDescription.StrokeDescription(path, 0, 1))
+                          .build();
+                  return instance.dispatchGesture(gesture, null, null);
+              }
 
-        counter = label("Clics: 0");
-        status = label("Pausado");
+              @Override
+              public void onAccessibilityEvent(AccessibilityEvent event) {}
 
-        rowButton("INICIAR", this::startClicks);
-        rowButton("PAUSAR", this::pauseClicks);
-        rowButton("REINICIAR CONTADOR", () -> {
-            clicks = 0;
-            counter.setText("Clics: 0");
-        });
-        rowButton("CERRAR PANEL", this::stopSelf);
+              @Override
+              public void onInterrupt() {}
 
-        resizeHandle = new TextView(this);
-        ((TextView) resizeHandle).setText("◢ Arrastra para cambiar el tamaño");
-        ((TextView) resizeHandle).setTextColor(Color.DKGRAY);
-        ((TextView) resizeHandle).setGravity(Gravity.RIGHT);
-        resizeHandle.setPadding(4, 8, 4, 8);
-        panel.addView(resizeHandle);
+              @Override
+              public void onDestroy() {
+                  instance = null;
+                  super.onDestroy();
+              }
+          }
+          EOF
 
-        resizeHandle.setOnTouchListener((v, e) -> {
-            if (e.getAction() == MotionEvent.ACTION_DOWN) {
-                v.setTag(new float[]{
-                    e.getRawX(), e.getRawY(),
-                    panelParams.width, panelParams.height
-                });
-                return true;
-            }
+          cat > app/src/main/java/com/autoclicker/android/FloatingPanelService.java <<'EOF'
+          package com.autoclicker.android;
 
-            if (e.getAction() == MotionEvent.ACTION_MOVE) {
-                float[] a = (float[]) v.getTag();
+          import android.app.Service;
+          import android.content.Intent;
+          import android.graphics.Color;
+          import android.graphics.PixelFormat;
+          import android.os.Handler;
+          import android.os.IBinder;
+          import android.provider.Settings;
+          import android.view.Gravity;
+          import android.view.MotionEvent;
+          import android.view.View;
+          import android.view.WindowManager;
+          import android.widget.Button;
+          import android.widget.EditText;
+          import android.widget.LinearLayout;
+          import android.widget.TextView;
 
-                panelWidth = Math.max(220, Math.min(900,
-                    (int) (a[2] + e.getRawX() - a[0])));
-                panelHeight = Math.max(260, Math.min(1400,
-                    (int) (a[3] + e.getRawY() - a[1])));
+          public class FloatingPanelService extends Service {
+              private WindowManager wm;
+              private WindowManager.LayoutParams panelParams, markerParams;
+              private LinearLayout panel;
+              private TextView counter, status;
+              private View marker;
+              private EditText xInput, yInput, intervalInput;
+              private final Handler handler = new Handler();
+              private boolean running = false;
+              private int clicks = 0;
+              private int x = 300, y = 500, panelSize = 1;
+              private Runnable clickTask;
 
-                panelParams.width = panelWidth;
-                panelParams.height = panelHeight;
-                wm.updateViewLayout(panel, panelParams);
-                return true;
-            }
+              @Override
+              public IBinder onBind(Intent intent) {
+                  return null;
+              }
 
-            return e.getAction() == MotionEvent.ACTION_UP;
-        });
+              @Override
+              public void onCreate() {
+                  super.onCreate();
+                  if (!Settings.canDrawOverlays(this)) {
+                      stopSelf();
+                      return;
+                  }
+                  wm = (WindowManager) getSystemService(WINDOW_SERVICE);
+                  createMarker();
+                  createPanel();
+              }
 
-        panelParams = new WindowManager.LayoutParams(
-            panelWidth, panelHeight,
-            overlayType(),
-            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
-            PixelFormat.TRANSLUCENT
-        );
+              private int overlayType() {
+                  if (android.os.Build.VERSION.SDK_INT >= 26) {
+                      return WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
+                  }
+                  return WindowManager.LayoutParams.TYPE_PHONE;
+              }
 
-        panelParams.gravity = Gravity.TOP | Gravity.END;
-        panelParams.x = 10;
-        panelParams.y = 120;
-        wm.addView(panel, panelParams);
-    }
+              private void createMarker() {
+                  marker = new View(this);
+                  marker.setBackgroundColor(Color.RED);
+                  markerParams = new WindowManager.LayoutParams(
+                      54, 54, overlayType(),
+                      WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                      PixelFormat.TRANSLUCENT);
+                  markerParams.gravity = Gravity.TOP | Gravity.START;
+                  markerParams.x = x;
+                  markerParams.y = y;
 
-    private EditText field(String hint, String value) {
-        EditText e = new EditText(this);
-        e.setSingleLine(true);
-        e.setText(value);
-        e.setHint(hint);
-        e.setTextColor(Color.BLACK);
-        e.setSelectAllOnFocus(true);
-        content.addView(e, new LinearLayout.LayoutParams(-1, 48));
-        return e;
-    }
+                  marker.setOnTouchListener((v, e) -> {
+                      if (e.getAction() == MotionEvent.ACTION_DOWN) {
+                          v.setTag(new float[]{e.getRawX(), e.getRawY(),
+                              markerParams.x, markerParams.y});
+                          return true;
+                      }
+                      if (e.getAction() == MotionEvent.ACTION_MOVE) {
+                          float[] a = (float[]) v.getTag();
+                          markerParams.x = (int) (a[2] + e.getRawX() - a[0]);
+                          markerParams.y = (int) (a[3] + e.getRawY() - a[1]);
+                          x = markerParams.x;
+                          y = markerParams.y;
+                          wm.updateViewLayout(marker, markerParams);
+                          syncCoordinates();
+                          return true;
+                      }
+                      return e.getAction() == MotionEvent.ACTION_UP;
+                  });
+                  wm.addView(marker, markerParams);
+              }
 
-    private TextView label(String text) {
-        TextView t = new TextView(this);
-        t.setText(text);
-        t.setTextColor(Color.BLACK);
-        t.setPadding(4, 8, 4, 8);
-        content.addView(t);
-        return t;
-    }
+              private void createPanel() {
+                  panel = new LinearLayout(this);
+                  panel.setOrientation(LinearLayout.VERTICAL);
+                  panel.setPadding(8, 6, 8, 6);
+                  panel.setBackgroundColor(Color.WHITE);
 
-    private void rowButton(String text, Runnable action) {
-        Button b = new Button(this);
-        b.setText(text);
-        content.addView(b, new LinearLayout.LayoutParams(-1, -2));
-        b.setOnClickListener(v -> action.run());
-    }
+                  TextView title = new TextView(this);
+                  title.setText("AutoClicker  ☰");
+                  title.setTextColor(Color.BLACK);
+                  title.setTextSize(18);
+                  title.setPadding(4, 8, 4, 8);
+                  title.setOnTouchListener(dragPanel());
+                  panel.addView(title);
 
-    private int number(EditText e, int fallback) {
-        try {
-            return Integer.parseInt(e.getText().toString().trim());
-        } catch (Exception ex) {
-            return fallback;
-        }
-    }
+                  xInput = field("Coordenada X", String.valueOf(x));
+                  yInput = field("Coordenada Y", String.valueOf(y));
+                  intervalInput = field("Intervalo en ms (mínimo 10)", "100");
 
-    private void syncCoordinates() {
-        if (xInput != null) xInput.setText(String.valueOf(x));
-        if (yInput != null) yInput.setText(String.valueOf(y));
-    }
+                  rowButton("UBICAR PUNTO", () -> {
+                      x = number(xInput, x);
+                      y = number(yInput, y);
+                      markerParams.x = x;
+                      markerParams.y = y;
+                      wm.updateViewLayout(marker, markerParams);
+                      status.setText("Punto actualizado");
+                  });
 
-    private View.OnTouchListener dragPanel() {
-        return (v, e) -> {
-            if (e.getAction() == MotionEvent.ACTION_DOWN) {
-                v.setTag(new float[]{
-                    e.getRawX(), e.getRawY(),
-                    panelParams.x, panelParams.y
-                });
-                return true;
-            }
+                  counter = new TextView(this);
+                  counter.setTextColor(Color.BLACK);
+                  counter.setText("Clics: 0");
+                  panel.addView(counter);
 
-            if (e.getAction() == MotionEvent.ACTION_MOVE) {
-                float[] a = (float[]) v.getTag();
-                panelParams.x = (int) (a[2] - e.getRawX() + a[0]);
-                panelParams.y = (int) (a[3] + e.getRawY() - a[1]);
-                wm.updateViewLayout(panel, panelParams);
-                return true;
-            }
+                  status = new TextView(this);
+                  status.setTextColor(Color.DKGRAY);
+                  status.setText("Pausado");
+                  panel.addView(status);
 
-            return e.getAction() == MotionEvent.ACTION_UP;
-        };
-    }
+                  rowButton("INICIAR", this::startClicks);
+                  rowButton("PAUSAR", this::pauseClicks);
+                  rowButton("REINICIAR CONTADOR", () -> {
+                      clicks = 0;
+                      counter.setText("Clics: 0");
+                  });
+                  rowButton("A− ACHICAR", () -> resize(-1));
+                  rowButton("A+ AGRANDAR", () -> resize(1));
+                  rowButton("CERRAR PANEL", this::stopSelf);
 
-    private void startClicks() {
-        if (running) return;
+                  panelParams = new WindowManager.LayoutParams(
+                      280, WindowManager.LayoutParams.WRAP_CONTENT,
+                      overlayType(),
+                      WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                          | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+                          | WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM,
+                      PixelFormat.TRANSLUCENT);
+                  panelParams.gravity = Gravity.TOP | Gravity.END;
+                  panelParams.x = 10;
+                  panelParams.y = 120;
+                  wm.addView(panel, panelParams);
+              }
 
-        if (AutoClickService.click(x, y) == false) {
-            status.setText("Activa Accesibilidad primero");
-            return;
-        }
+              private EditText field(String hint, String value) {
+                  EditText e = new EditText(this);
+                  e.setSingleLine(true);
+                  e.setText(value);
+                  e.setHint(hint);
+                  e.setTextColor(Color.BLACK);
+                  e.setSelectAllOnFocus(true);
+                  panel.addView(e, new LinearLayout.LayoutParams(-1, 44));
+                  return e;
+              }
 
-        running = true;
-        status.setText("Ejecutando");
+              private void rowButton(String label, Runnable action) {
+                  Button b = new Button(this);
+                  b.setText(label);
+                  b.setOnClickListener(v -> action.run());
+                  panel.addView(b, new LinearLayout.LayoutParams(-1, -2));
+              }
 
-        clickTask = new Runnable() {
-            @Override
-            public void run() {
-                if (!running) return;
+              private int number(EditText e, int fallback) {
+                  try {
+                      return Integer.parseInt(e.getText().toString().trim());
+                  } catch (Exception ex) {
+                      return fallback;
+                  }
+              }
 
-                x = number(xInput, x);
-                y = number(yInput, y);
-                int interval = Math.max(10,
-                    Math.min(2000, number(intervalInput, 100)));
+              private void syncCoordinates() {
+                  if (xInput != null) xInput.setText(String.valueOf(x));
+                  if (yInput != null) yInput.setText(String.valueOf(y));
+              }
 
-                AutoClickService.click(x, y);
-                clicks++;
-                counter.setText("Clics: " + clicks);
-                handler.postDelayed(this, interval);
-            }
-        };
+              private View.OnTouchListener dragPanel() {
+                  return (v, e) -> {
+                      if (e.getAction() == MotionEvent.ACTION_DOWN) {
+                          v.setTag(new float[]{e.getRawX(), e.getRawY(),
+                              panelParams.x, panelParams.y});
+                          return true;
+                      }
+                      if (e.getAction() == MotionEvent.ACTION_MOVE) {
+                          float[] a = (float[]) v.getTag();
+                          panelParams.x = (int) (a[2] - e.getRawX() + a[0]);
+                          panelParams.y = (int) (a[3] + e.getRawY() - a[1]);
+                          wm.updateViewLayout(panel, panelParams);
+                          return true;
+                      }
+                      return e.getAction() == MotionEvent.ACTION_UP;
+                  };
+              }
 
-        handler.post(clickTask);
-    }
+              private void startClicks() {
+                  if (running) return;
+                  if (AutoClickService.click(x, y) == false) {
+                      status.setText("Activa primero el servicio de accesibilidad");
+                      return;
+                  }
+                  running = true;
+                  status.setText("Ejecutando");
+                  clickTask = new Runnable() {
+                      @Override
+                      public void run() {
+                          if (!running) return;
+                          x = number(xInput, x);
+                          y = number(yInput, y);
+                          int interval = Math.max(10,
+                              Math.min(2000, number(intervalInput, 100)));
+                          AutoClickService.click(x, y);
+                          clicks++;
+                          counter.setText("Clics: " + clicks);
+                          handler.postDelayed(this, interval);
+                      }
+                  };
+                  handler.post(clickTask);
+              }
 
-    private void pauseClicks() {
-        running = false;
-        if (clickTask != null) handler.removeCallbacks(clickTask);
-        if (status != null) status.setText("Pausado");
-    }
+              private void pauseClicks() {
+                  running = false;
+                  if (clickTask != null) handler.removeCallbacks(clickTask);
+                  if (status != null) status.setText("Pausado");
+              }
 
-    @Override
-    public void onDestroy() {
-        pauseClicks();
+              private void resize(int change) {
+                  panelSize = Math.max(1, Math.min(3, panelSize + change));
+                  panelParams.width = 280 * panelSize;
+                  wm.updateViewLayout(panel, panelParams);
+              }
 
-        if (wm != null) {
-            if (panel != null) wm.removeView(panel);
-            if (marker != null) wm.removeView(marker);
-        }
+              @Override
+              public void onDestroy() {
+                  pauseClicks();
+                  if (wm != null) {
+                      if (panel != null) wm.removeView(panel);
+                      if (marker != null) wm.removeView(marker);
+                  }
+                  super.onDestroy();
+              }
+          }
+          EOF
 
-        super.onDestroy();
-    }
-}
+      - name: Compilar APK
+        run: gradle --no-daemon assembleDebug
+
+      - name: Publicar APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: AutoClickerNuevo-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          
