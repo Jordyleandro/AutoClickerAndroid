@@ -78,9 +78,11 @@ jobs:
           plugins {
               id 'com.android.application'
           }
+
           android {
               namespace 'com.autoclicker.android'
               compileSdk 35
+
               defaultConfig {
                   applicationId 'com.autoclicker.android'
                   minSdk 24
@@ -94,10 +96,12 @@ jobs:
           cat > app/src/main/AndroidManifest.xml <<'EOF'
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
               <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
+
               <application
                   android:theme="@android:style/Theme.Material.Light.NoActionBar"
                   android:label="AutoClickerNuevo"
                   android:allowBackup="false">
+
                   <activity
                       android:name=".MainActivity"
                       android:exported="true">
@@ -106,6 +110,7 @@ jobs:
                           <category android:name="android.intent.category.LAUNCHER"/>
                       </intent-filter>
                   </activity>
+
                   <service
                       android:name=".AutoClickService"
                       android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
@@ -117,6 +122,7 @@ jobs:
                           android:name="android.accessibilityservice"
                           android:resource="@xml/accessibility_service_config"/>
                   </service>
+
                   <service
                       android:name=".FloatingPanelService"
                       android:exported="false"/>
@@ -157,6 +163,7 @@ jobs:
               @Override
               public void onCreate(Bundle b) {
                   super.onCreate(b);
+
                   LinearLayout l = new LinearLayout(this);
                   l.setOrientation(LinearLayout.VERTICAL);
                   l.setPadding(24, 30, 24, 24);
@@ -218,14 +225,21 @@ jobs:
                   instance = this;
               }
 
+              public static boolean isConnected() {
+                  return instance != null;
+              }
+
               public static boolean click(float x, float y) {
                   if (instance == null) return false;
+
                   Path path = new Path();
                   path.moveTo(x, y);
+
                   GestureDescription gesture =
                       new GestureDescription.Builder()
                           .addStroke(new GestureDescription.StrokeDescription(path, 0, 1))
                           .build();
+
                   return instance.dispatchGesture(gesture, null, null);
               }
 
@@ -237,7 +251,7 @@ jobs:
 
               @Override
               public void onDestroy() {
-                  instance = null;
+                  if (instance == this) instance = null;
                   super.onDestroy();
               }
           }
@@ -250,9 +264,11 @@ jobs:
           import android.content.Intent;
           import android.graphics.Color;
           import android.graphics.PixelFormat;
+          import android.graphics.drawable.GradientDrawable;
           import android.os.Handler;
           import android.os.IBinder;
           import android.provider.Settings;
+          import android.util.DisplayMetrics;
           import android.view.Gravity;
           import android.view.MotionEvent;
           import android.view.View;
@@ -260,19 +276,38 @@ jobs:
           import android.widget.Button;
           import android.widget.EditText;
           import android.widget.LinearLayout;
+          import android.widget.ScrollView;
+          import android.widget.SeekBar;
           import android.widget.TextView;
 
           public class FloatingPanelService extends Service {
               private WindowManager wm;
               private WindowManager.LayoutParams panelParams, markerParams;
-              private LinearLayout panel;
+
+              private LinearLayout panel, content;
+              private ScrollView scrollView;
               private TextView counter, status;
+              private TextView sizeLabel, transparencyLabel;
+              private TextView resizeHandle;
               private View marker;
               private EditText xInput, yInput, intervalInput;
+              private SeekBar sizeSeekBar, transparencySeekBar;
+
               private final Handler handler = new Handler();
+
               private boolean running = false;
               private int clicks = 0;
-              private int x = 300, y = 500, panelSize = 1;
+
+              // X e Y representan el CENTRO del punto.
+              private int x = 300;
+              private int y = 500;
+
+              private int markerSize = 54;
+              private int transparency = 30;
+
+              private int minPanelWidth = 230;
+              private int minPanelHeight = 300;
+
               private Runnable clickTask;
 
               @Override
@@ -283,11 +318,14 @@ jobs:
               @Override
               public void onCreate() {
                   super.onCreate();
+
                   if (!Settings.canDrawOverlays(this)) {
                       stopSelf();
                       return;
                   }
+
                   wm = (WindowManager) getSystemService(WINDOW_SERVICE);
+
                   createMarker();
                   createPanel();
               }
@@ -301,34 +339,85 @@ jobs:
 
               private void createMarker() {
                   marker = new View(this);
-                  marker.setBackgroundColor(Color.RED);
+
                   markerParams = new WindowManager.LayoutParams(
-                      54, 54, overlayType(),
+                      markerSize,
+                      markerSize,
+                      overlayType(),
                       WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
-                      PixelFormat.TRANSLUCENT);
+                      PixelFormat.TRANSLUCENT
+                  );
+
                   markerParams.gravity = Gravity.TOP | Gravity.START;
-                  markerParams.x = x;
-                  markerParams.y = y;
+                  markerParams.x = x - markerSize / 2;
+                  markerParams.y = y - markerSize / 2;
+
+                  updateMarkerAppearance();
 
                   marker.setOnTouchListener((v, e) -> {
                       if (e.getAction() == MotionEvent.ACTION_DOWN) {
-                          v.setTag(new float[]{e.getRawX(), e.getRawY(),
-                              markerParams.x, markerParams.y});
+                          v.setTag(new float[]{
+                              e.getRawX(),
+                              e.getRawY(),
+                              markerParams.x,
+                              markerParams.y
+                          });
                           return true;
                       }
+
                       if (e.getAction() == MotionEvent.ACTION_MOVE) {
                           float[] a = (float[]) v.getTag();
-                          markerParams.x = (int) (a[2] + e.getRawX() - a[0]);
-                          markerParams.y = (int) (a[3] + e.getRawY() - a[1]);
-                          x = markerParams.x;
-                          y = markerParams.y;
+
+                          markerParams.x = (int) (
+                              a[2] + e.getRawX() - a[0]
+                          );
+
+                          markerParams.y = (int) (
+                              a[3] + e.getRawY() - a[1]
+                          );
+
+                          x = markerParams.x + markerSize / 2;
+                          y = markerParams.y + markerSize / 2;
+
                           wm.updateViewLayout(marker, markerParams);
                           syncCoordinates();
+
                           return true;
                       }
+
                       return e.getAction() == MotionEvent.ACTION_UP;
                   });
+
                   wm.addView(marker, markerParams);
+              }
+
+              private void updateMarkerAppearance() {
+                  if (marker == null) return;
+
+                  GradientDrawable circle = new GradientDrawable();
+                  circle.setShape(GradientDrawable.OVAL);
+
+                  int alpha = (int) (
+                      255 * (100 - transparency) / 100.0
+                  );
+
+                  circle.setColor(Color.argb(alpha, 255, 0, 0));
+                  marker.setBackground(circle);
+              }
+
+              private void updateMarkerSize(int newSize) {
+                  markerSize = Math.max(20, Math.min(120, newSize));
+
+                  if (markerParams != null && marker != null) {
+                      markerParams.width = markerSize;
+                      markerParams.height = markerSize;
+                      markerParams.x = x - markerSize / 2;
+                      markerParams.y = y - markerSize / 2;
+
+                      wm.updateViewLayout(marker, markerParams);
+                  }
+
+                  updateMarkerAppearance();
               }
 
               private void createPanel() {
@@ -343,159 +432,121 @@ jobs:
                   title.setTextSize(18);
                   title.setPadding(4, 8, 4, 8);
                   title.setOnTouchListener(dragPanel());
+
                   panel.addView(title);
+
+                  scrollView = new ScrollView(this);
+                  scrollView.setFillViewport(false);
+
+                  content = new LinearLayout(this);
+                  content.setOrientation(LinearLayout.VERTICAL);
+
+                  scrollView.addView(content);
+
+                  panel.addView(scrollView, new LinearLayout.LayoutParams(
+                      LinearLayout.LayoutParams.MATCH_PARENT,
+                      0,
+                      1
+                  ));
 
                   xInput = field("Coordenada X", String.valueOf(x));
                   yInput = field("Coordenada Y", String.valueOf(y));
                   intervalInput = field("Intervalo en ms (mínimo 10)", "100");
 
                   rowButton("UBICAR PUNTO", () -> {
-                      x = number(xInput, x);
-                      y = number(yInput, y);
-                      markerParams.x = x;
-                      markerParams.y = y;
-                      wm.updateViewLayout(marker, markerParams);
+                      readCoordinates();
+                      updateMarkerPosition();
                       status.setText("Punto actualizado");
                   });
 
                   counter = new TextView(this);
                   counter.setTextColor(Color.BLACK);
                   counter.setText("Clics: 0");
-                  panel.addView(counter);
+                  content.addView(counter);
 
                   status = new TextView(this);
                   status.setTextColor(Color.DKGRAY);
                   status.setText("Pausado");
-                  panel.addView(status);
+                  content.addView(status);
 
                   rowButton("INICIAR", this::startClicks);
                   rowButton("PAUSAR", this::pauseClicks);
+
                   rowButton("REINICIAR CONTADOR", () -> {
                       clicks = 0;
                       counter.setText("Clics: 0");
                   });
-                  rowButton("A− ACHICAR", () -> resize(-1));
-                  rowButton("A+ AGRANDAR", () -> resize(1));
+
+                  sizeLabel = new TextView(this);
+                  sizeLabel.setTextColor(Color.BLACK);
+                  content.addView(sizeLabel);
+
+                  sizeSeekBar = new SeekBar(this);
+                  sizeSeekBar.setMax(100);
+                  sizeSeekBar.setProgress(markerSize - 20);
+
+                  sizeSeekBar.setOnSeekBarChangeListener(
+                      new SeekBar.OnSeekBarChangeListener() {
+                          @Override
+                          public void onProgressChanged(
+                              SeekBar seekBar, int progress, boolean fromUser
+                          ) {
+                              int newSize = 20 + progress;
+                              sizeLabel.setText(
+                                  "Tamaño del punto: " + newSize + " px"
+                              );
+
+                              if (fromUser) {
+                                  updateMarkerSize(newSize);
+                              }
+                          }
+
+                          @Override
+                          public void onStartTrackingTouch(SeekBar seekBar) {}
+
+                          @Override
+                          public void onStopTrackingTouch(SeekBar seekBar) {}
+                      }
+                  );
+
+                  content.addView(sizeSeekBar);
+
+                  transparencyLabel = new TextView(this);
+                  transparencyLabel.setTextColor(Color.BLACK);
+                  content.addView(transparencyLabel);
+
+                  transparencySeekBar = new SeekBar(this);
+                  transparencySeekBar.setMax(90);
+                  transparencySeekBar.setProgress(transparency);
+
+                  transparencySeekBar.setOnSeekBarChangeListener(
+                      new SeekBar.OnSeekBarChangeListener() {
+                          @Override
+                          public void onProgressChanged(
+                              SeekBar seekBar, int progress, boolean fromUser
+                          ) {
+                              transparency = progress;
+
+                              transparencyLabel.setText(
+                                  "Transparencia: " + transparency + "%"
+                              );
+
+                              updateMarkerAppearance();
+                          }
+
+                          @Override
+                          public void onStartTrackingTouch(SeekBar seekBar) {}
+
+                          @Override
+                          public void onStopTrackingTouch(SeekBar seekBar) {}
+                      }
+                  );
+
+                  content.addView(transparencySeekBar);
+
                   rowButton("CERRAR PANEL", this::stopSelf);
 
-                  panelParams = new WindowManager.LayoutParams(
-                      280, WindowManager.LayoutParams.WRAP_CONTENT,
-                      overlayType(),
-                      WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                          | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
-                          | WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM,
-                      PixelFormat.TRANSLUCENT);
-                  panelParams.gravity = Gravity.TOP | Gravity.END;
-                  panelParams.x = 10;
-                  panelParams.y = 120;
-                  wm.addView(panel, panelParams);
-              }
-
-              private EditText field(String hint, String value) {
-                  EditText e = new EditText(this);
-                  e.setSingleLine(true);
-                  e.setText(value);
-                  e.setHint(hint);
-                  e.setTextColor(Color.BLACK);
-                  e.setSelectAllOnFocus(true);
-                  panel.addView(e, new LinearLayout.LayoutParams(-1, 44));
-                  return e;
-              }
-
-              private void rowButton(String label, Runnable action) {
-                  Button b = new Button(this);
-                  b.setText(label);
-                  b.setOnClickListener(v -> action.run());
-                  panel.addView(b, new LinearLayout.LayoutParams(-1, -2));
-              }
-
-              private int number(EditText e, int fallback) {
-                  try {
-                      return Integer.parseInt(e.getText().toString().trim());
-                  } catch (Exception ex) {
-                      return fallback;
-                  }
-              }
-
-              private void syncCoordinates() {
-                  if (xInput != null) xInput.setText(String.valueOf(x));
-                  if (yInput != null) yInput.setText(String.valueOf(y));
-              }
-
-              private View.OnTouchListener dragPanel() {
-                  return (v, e) -> {
-                      if (e.getAction() == MotionEvent.ACTION_DOWN) {
-                          v.setTag(new float[]{e.getRawX(), e.getRawY(),
-                              panelParams.x, panelParams.y});
-                          return true;
-                      }
-                      if (e.getAction() == MotionEvent.ACTION_MOVE) {
-                          float[] a = (float[]) v.getTag();
-                          panelParams.x = (int) (a[2] - e.getRawX() + a[0]);
-                          panelParams.y = (int) (a[3] + e.getRawY() - a[1]);
-                          wm.updateViewLayout(panel, panelParams);
-                          return true;
-                      }
-                      return e.getAction() == MotionEvent.ACTION_UP;
-                  };
-              }
-
-              private void startClicks() {
-                  if (running) return;
-                  if (AutoClickService.click(x, y) == false) {
-                      status.setText("Activa primero el servicio de accesibilidad");
-                      return;
-                  }
-                  running = true;
-                  status.setText("Ejecutando");
-                  clickTask = new Runnable() {
-                      @Override
-                      public void run() {
-                          if (!running) return;
-                          x = number(xInput, x);
-                          y = number(yInput, y);
-                          int interval = Math.max(10,
-                              Math.min(2000, number(intervalInput, 100)));
-                          AutoClickService.click(x, y);
-                          clicks++;
-                          counter.setText("Clics: " + clicks);
-                          handler.postDelayed(this, interval);
-                      }
-                  };
-                  handler.post(clickTask);
-              }
-
-              private void pauseClicks() {
-                  running = false;
-                  if (clickTask != null) handler.removeCallbacks(clickTask);
-                  if (status != null) status.setText("Pausado");
-              }
-
-              private void resize(int change) {
-                  panelSize = Math.max(1, Math.min(3, panelSize + change));
-                  panelParams.width = 280 * panelSize;
-                  wm.updateViewLayout(panel, panelParams);
-              }
-
-              @Override
-              public void onDestroy() {
-                  pauseClicks();
-                  if (wm != null) {
-                      if (panel != null) wm.removeView(panel);
-                      if (marker != null) wm.removeView(marker);
-                  }
-                  super.onDestroy();
-              }
-          }
-          EOF
-
-      - name: Compilar APK
-        run: gradle --no-daemon assembleDebug
-
-      - name: Publicar APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: AutoClickerNuevo-APK
-          path: app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
+                  resizeHandle = new TextView(this);
+                  resizeHandle.setText("◢ Arrastra aquí para cambiar tamaño");
+                  resizeHandle.setTextColor(Color.BLACK);
           
