@@ -23,7 +23,10 @@ public class FloatingPanelService extends Service {
     private WindowManager wm;
     private LinearLayout panel;
     private TextView marker;
-    private WindowManager.LayoutParams panelParams, markerParams;
+    private TextView coordinatesLabel;
+
+    private WindowManager.LayoutParams panelParams;
+    private WindowManager.LayoutParams markerParams;
 
     private int markerSize = 48;
     private int clicksPerSecond = 10;
@@ -33,7 +36,8 @@ public class FloatingPanelService extends Service {
         super.onCreate();
 
         if (!Settings.canDrawOverlays(this)) {
-            Toast.makeText(this, "Permite mostrar sobre otras aplicaciones",
+            Toast.makeText(this,
+                    "Permite mostrar sobre otras aplicaciones",
                     Toast.LENGTH_LONG).show();
             stopSelf();
             return;
@@ -46,7 +50,7 @@ public class FloatingPanelService extends Service {
                 : WindowManager.LayoutParams.TYPE_PHONE;
 
         panelParams = new WindowManager.LayoutParams(
-                280,
+                300,
                 WindowManager.LayoutParams.WRAP_CONTENT,
                 type,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
@@ -68,35 +72,36 @@ public class FloatingPanelService extends Service {
         title.setTextSize(18);
         panel.addView(title);
 
+        coordinatesLabel = new TextView(this);
+        coordinatesLabel.setTextColor(Color.BLUE);
+        coordinatesLabel.setTextSize(16);
+        coordinatesLabel.setText("X: -- | Y: --");
+        panel.addView(coordinatesLabel);
+
         Button start = new Button(this);
         start.setText("INICIAR CLICS");
         start.setOnClickListener(v -> {
             AutoClickService s = AutoClickService.getInstance();
 
             if (s == null) {
-                Toast.makeText(
-                        this,
+                Toast.makeText(this,
                         "Activa AutoClicker en Accesibilidad",
-                        Toast.LENGTH_LONG
-                ).show();
+                        Toast.LENGTH_LONG).show();
 
                 Intent intent = new Intent(
-                        Settings.ACTION_ACCESSIBILITY_SETTINGS
-                );
+                        Settings.ACTION_ACCESSIBILITY_SETTINGS);
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 startActivity(intent);
                 return;
             }
 
             updateClickPosition();
-            s.setInterval(Math.max(50, 1000L / clicksPerSecond));
+            s.setInterval(1000L / clicksPerSecond);
             s.startClicks();
 
-            Toast.makeText(
-                    this,
+            Toast.makeText(this,
                     "Clics iniciados",
-                    Toast.LENGTH_SHORT
-            ).show();
+                    Toast.LENGTH_SHORT).show();
         });
         panel.addView(start);
 
@@ -106,83 +111,74 @@ public class FloatingPanelService extends Service {
             AutoClickService s = AutoClickService.getInstance();
             if (s != null) {
                 s.stopClicks();
-                Toast.makeText(this, "Clics detenidos",
-                        Toast.LENGTH_SHORT).show();
             }
+            Toast.makeText(this,
+                    "Clics detenidos",
+                    Toast.LENGTH_SHORT).show();
         });
         panel.addView(stop);
 
         TextView speedLabel = new TextView(this);
-        speedLabel.setText("Velocidad: 10 clics/seg");
         speedLabel.setTextColor(Color.BLACK);
+        speedLabel.setText("Velocidad: 10 clics/seg");
         panel.addView(speedLabel);
 
         SeekBar speed = new SeekBar(this);
         speed.setMax(19);
         speed.setProgress(9);
-
         speed.setOnSeekBarChangeListener(
                 new SeekBar.OnSeekBarChangeListener() {
-                    @Override
-                    public void onProgressChanged(
-                            SeekBar b, int p, boolean user) {
-                        clicksPerSecond = p + 1;
-                        speedLabel.setText(
-                                "Velocidad: " + clicksPerSecond
-                                        + " clics/seg"
-                        );
+            @Override
+            public void onProgressChanged(
+                    SeekBar b, int p, boolean user) {
+                clicksPerSecond = p + 1;
+                speedLabel.setText(
+                        "Velocidad: " + clicksPerSecond + " clics/seg");
 
-                        AutoClickService s =
-                                AutoClickService.getInstance();
-
-                        if (s != null) {
-                            s.setInterval(
-                                    Math.max(50, 1000L / clicksPerSecond)
-                            );
-                        }
-                    }
-
-                    @Override
-                    public void onStartTrackingTouch(SeekBar b) {}
-
-                    @Override
-                    public void onStopTrackingTouch(SeekBar b) {}
+                AutoClickService s = AutoClickService.getInstance();
+                if (s != null) {
+                    s.setInterval(1000L / clicksPerSecond);
                 }
-        );
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar b) {}
+
+            @Override
+            public void onStopTrackingTouch(SeekBar b) {}
+        });
         panel.addView(speed);
 
         TextView sizeLabel = new TextView(this);
-        sizeLabel.setText("Tamaño del punto");
         sizeLabel.setTextColor(Color.BLACK);
+        sizeLabel.setText("Tamaño del punto");
         panel.addView(sizeLabel);
 
         SeekBar size = new SeekBar(this);
         size.setMax(100);
         size.setProgress(28);
-
         size.setOnSeekBarChangeListener(
                 new SeekBar.OnSeekBarChangeListener() {
-                    @Override
-                    public void onProgressChanged(
-                            SeekBar b, int p, boolean user) {
-                        markerSize = p + 20;
+            @Override
+            public void onProgressChanged(
+                    SeekBar b, int p, boolean user) {
+                markerSize = p + 20;
 
-                        if (marker != null && markerParams != null) {
-                            markerParams.width = markerSize;
-                            markerParams.height = markerSize;
-                            marker.setTextSize(markerSize / 2f);
-                            wm.updateViewLayout(marker, markerParams);
-                            updateClickPosition();
-                        }
-                    }
-
-                    @Override
-                    public void onStartTrackingTouch(SeekBar b) {}
-
-                    @Override
-                    public void onStopTrackingTouch(SeekBar b) {}
+                if (marker != null && markerParams != null) {
+                    markerParams.width = markerSize;
+                    markerParams.height = markerSize;
+                    marker.setTextSize(markerSize / 2f);
+                    wm.updateViewLayout(marker, markerParams);
+                    updateClickPosition();
                 }
-        );
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar b) {}
+
+            @Override
+            public void onStopTrackingTouch(SeekBar b) {}
+        });
         panel.addView(size);
 
         Button close = new Button(this);
@@ -227,23 +223,24 @@ public class FloatingPanelService extends Service {
     }
 
     private void updateClickPosition() {
-        if (marker == null) return;
+        if (marker == null || markerParams == null) {
+            return;
+        }
 
-        int[] location = new int[2];
-        marker.getLocationOnScreen(location);
+        int x = markerParams.x + markerSize / 2;
+        int y = markerParams.y + markerSize / 2;
+
+        coordinatesLabel.setText("X: " + x + " | Y: " + y);
 
         AutoClickService s = AutoClickService.getInstance();
-
         if (s != null) {
-            s.setPosition(
-                    location[0] + marker.getWidth() / 2,
-                    location[1] + marker.getHeight() / 2
-            );
+            s.setPosition(x, y);
         }
     }
 
     private void makeDraggable(
             View view, WindowManager.LayoutParams params) {
+
         view.setOnTouchListener(new View.OnTouchListener() {
             private int startX, startY, originalX, originalY;
 
@@ -280,11 +277,17 @@ public class FloatingPanelService extends Service {
     @Override
     public void onDestroy() {
         AutoClickService s = AutoClickService.getInstance();
-        if (s != null) s.stopClicks();
+        if (s != null) {
+            s.stopClicks();
+        }
 
         if (wm != null) {
-            if (panel != null) wm.removeView(panel);
-            if (marker != null) wm.removeView(marker);
+            if (panel != null && panel.isAttachedToWindow()) {
+                wm.removeView(panel);
+            }
+            if (marker != null && marker.isAttachedToWindow()) {
+                wm.removeView(marker);
+            }
         }
 
         super.onDestroy();
