@@ -22,13 +22,16 @@ jobs:
       - name: Configurar Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Aceptar licencias Android
+        run: yes | sdkmanager --licenses
+
+      - name: Instalar componentes SDK
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
       - name: Configurar Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-
-      - name: Instalar componentes SDK
-        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
       - name: Corregir acceso del servicio
         run: sed -i 's/protected void onServiceConnected()/public void onServiceConnected()/' app/src/main/java/com/autoclicker/android/AutoClickService.java
