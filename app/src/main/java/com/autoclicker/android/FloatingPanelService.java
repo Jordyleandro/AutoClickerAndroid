@@ -24,6 +24,8 @@ public class FloatingPanelService extends Service {
     private LinearLayout panel;
     private TextView marker;
     private TextView coordinatesLabel;
+    private TextView totalClicksLabel;
+    private TextView actualSpeedLabel;
 
     private WindowManager.LayoutParams panelParams;
     private WindowManager.LayoutParams markerParams;
@@ -33,6 +35,22 @@ public class FloatingPanelService extends Service {
 
     private static final int MAX_CLICKS_PER_SECOND = 1500;
     private static final int MIN_INTERVAL_MS = 1;
+
+    private final AutoClickService.StatsListener statsListener =
+            (total, rate) -> {
+                if (totalClicksLabel != null) {
+                    totalClicksLabel.setText(
+                            "Clics completados: " + total
+                    );
+                }
+
+                if (actualSpeedLabel != null) {
+                    actualSpeedLabel.setText(
+                            "Velocidad actual: " + rate
+                                    + " clics/seg"
+                    );
+                }
+            };
 
     @Override
     public void onCreate() {
@@ -44,7 +62,6 @@ public class FloatingPanelService extends Service {
                     "Permite mostrar sobre otras aplicaciones",
                     Toast.LENGTH_LONG
             ).show();
-
             stopSelf();
             return;
         }
@@ -73,7 +90,7 @@ public class FloatingPanelService extends Service {
         panel.setBackgroundColor(Color.WHITE);
 
         TextView title = new TextView(this);
-        title.setText("AutoClickerNuevo");
+        title.setText("Scg-92 autoclikerbb");
         title.setTextColor(Color.BLACK);
         title.setTextSize(18);
         panel.addView(title);
@@ -83,6 +100,28 @@ public class FloatingPanelService extends Service {
         coordinatesLabel.setTextSize(16);
         coordinatesLabel.setText("X: -- | Y: --");
         panel.addView(coordinatesLabel);
+
+        // Contador de clics completados
+        totalClicksLabel = new TextView(this);
+        totalClicksLabel.setTextColor(Color.rgb(0, 120, 0));
+        totalClicksLabel.setTextSize(18);
+        totalClicksLabel.setText("Clics completados: 0");
+        panel.addView(totalClicksLabel);
+
+        // Velocidad real informada por el servicio
+        actualSpeedLabel = new TextView(this);
+        actualSpeedLabel.setTextColor(Color.BLACK);
+        actualSpeedLabel.setTextSize(16);
+        actualSpeedLabel.setText("Velocidad actual: 0 clics/seg");
+        panel.addView(actualSpeedLabel);
+
+        // Conectar el contador con el servicio de accesibilidad
+        AutoClickService existingService =
+                AutoClickService.getInstance();
+
+        if (existingService != null) {
+            existingService.setStatsListener(statsListener);
+        }
 
         Button start = new Button(this);
         start.setText("INICIAR CLICS");
@@ -100,13 +139,15 @@ public class FloatingPanelService extends Service {
                 Intent intent = new Intent(
                         Settings.ACTION_ACCESSIBILITY_SETTINGS
                 );
-
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 startActivity(intent);
                 return;
             }
 
             updateClickPosition();
+
+            // Conectar las estadísticas antes de iniciar
+            s.setStatsListener(statsListener);
 
             s.setInterval(
                     Math.max(
@@ -115,11 +156,12 @@ public class FloatingPanelService extends Service {
                     )
             );
 
+            // startClicks() reinicia las estadísticas a cero
             s.startClicks();
 
             Toast.makeText(
                     this,
-                    "Clics iniciados",
+                    "Clics iniciados desde cero",
                     Toast.LENGTH_SHORT
             ).show();
         });
@@ -147,7 +189,7 @@ public class FloatingPanelService extends Service {
 
         TextView speedLabel = new TextView(this);
         speedLabel.setTextColor(Color.BLACK);
-        speedLabel.setText("Velocidad: 10 clics/seg");
+        speedLabel.setText("Velocidad configurada: 10 clics/seg");
         panel.addView(speedLabel);
 
         SeekBar speed = new SeekBar(this);
@@ -166,7 +208,7 @@ public class FloatingPanelService extends Service {
                 clicksPerSecond = progress + 1;
 
                 speedLabel.setText(
-                        "Velocidad: "
+                        "Velocidad configurada: "
                                 + clicksPerSecond
                                 + " clics/seg"
                 );
@@ -218,11 +260,9 @@ public class FloatingPanelService extends Service {
                 if (marker != null && markerParams != null) {
                     markerParams.width = markerSize;
                     markerParams.height = markerSize;
-
                     marker.setTextSize(markerSize / 2f);
 
                     wm.updateViewLayout(marker, markerParams);
-
                     updateClickPosition();
                 }
             }
@@ -260,7 +300,6 @@ public class FloatingPanelService extends Service {
         bg.setColor(0x22FF0000);
         bg.setShape(GradientDrawable.OVAL);
         bg.setStroke(2, Color.RED);
-
         marker.setBackground(bg);
 
         markerParams = new WindowManager.LayoutParams(
@@ -319,10 +358,8 @@ public class FloatingPanelService extends Service {
                 if (event.getAction() == MotionEvent.ACTION_DOWN) {
                     startX = (int) event.getRawX();
                     startY = (int) event.getRawY();
-
                     originalX = params.x;
                     originalY = params.y;
-
                     return true;
                 }
 
@@ -355,6 +392,7 @@ public class FloatingPanelService extends Service {
 
         if (s != null) {
             s.stopClicks();
+            s.setStatsListener(null);
         }
 
         if (wm != null) {
@@ -366,6 +404,11 @@ public class FloatingPanelService extends Service {
                 wm.removeView(marker);
             }
         }
+
+        panel = null;
+        marker = null;
+        totalClicksLabel = null;
+        actualSpeedLabel = null;
 
         super.onDestroy();
     }
