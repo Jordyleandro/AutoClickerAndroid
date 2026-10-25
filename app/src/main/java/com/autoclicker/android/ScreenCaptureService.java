@@ -8,6 +8,8 @@ import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ServiceInfo;
+import android.graphics.Bitmap;
+import android.graphics.Color;
 import android.graphics.PixelFormat;
 import android.hardware.display.DisplayManager;
 import android.hardware.display.VirtualDisplay;
@@ -19,7 +21,13 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.IBinder;
+import android.os.SystemClock;
 import android.util.Log;
+
+import java.nio.ByteBuffer;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.List;
 
 public class ScreenCaptureService extends Service {
 
@@ -35,13 +43,18 @@ public class ScreenCaptureService extends Service {
     private static final int NOTIFICATION_ID = 902;
     private static final String CHANNEL_ID = "screen_capture";
 
+    // Reducimos la imagen para analizarla sin cargar demasiado el teléfono.
+    private static final int ANALYSIS_WIDTH = 180;
+    private static final int ANALYSIS_HEIGHT = 320;
+
     private MediaProjection projection;
     private VirtualDisplay virtualDisplay;
     private ImageReader imageReader;
     private HandlerThread imageThread;
     private Handler imageHandler;
 
-    private long lastLogTime = 0L;
+    private long lastAnalysisTime = 0L;
+    private boolean processingImage = false;
 
     @Override
     public void onCreate() {
@@ -97,14 +110,13 @@ public class ScreenCaptureService extends Service {
     @SuppressWarnings("deprecation")
     private Intent getResultIntent(Intent source) {
         if (Build.VERSION.SDK_INT >= 33) {
-            return source.getParcelableExtra(EXTRA_RESULT_DATA, Intent.class);
+            return source.getParcelableExtra(
+                    EXTRA_RESULT_DATA, Intent.class);
         }
         return source.getParcelableExtra(EXTRA_RESULT_DATA);
     }
 
     private void startCapture(int resultCode, Intent resultData) {
-        // Limpiar recursos anteriores sin detener la notificación
-        // del servicio que acabamos de iniciar.
         releaseCaptureResources();
 
         MediaProjectionManager manager =
@@ -131,7 +143,8 @@ public class ScreenCaptureService extends Service {
                         Context.WINDOW_SERVICE);
 
         if (windowManager == null) {
-            throw new IllegalStateException("WindowManager no disponible");
+            throw new IllegalStateException(
+                    "WindowManager no disponible");
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -165,28 +178,52 @@ public class ScreenCaptureService extends Service {
         imageReader.setOnImageAvailableListener(reader -> {
             Image image = null;
 
+            if (processingImage) {
+                image = reader.acquireLatestImage();
+                if (image != null) image.close();
+                return;
+            }
+
             try {
                 image = reader.acquireLatestImage();
 
                 if (image != null) {
-                    long now = android.os.SystemClock.elapsedRealtime();
+                    long now = SystemClock.elapsedRealtime();
 
-                    if (now - lastLogTime >= 3000L) {
-                        lastLogTime = now;
-                        Log.d(TAG, "Captura recibida correctamente: "
-                                + image.getWidth() + " x "
-                                + image.getHeight());
+                    // Analizamos como máximo una vez cada 700 ms.
+                    if (now - lastAnalysisTime >= 700L) {
+                        lastAnalysisTime = now;
+                        processingImage = true;
+
+                        try {
+                            List<Detection> detections =
+                                    analyzeImage(image);
+
+                            Log.i(TAG,
+                                    "Análisis terminado. Posibles zonas: "
+                                            + detections.size());
+
+                            for (Detection d : detections) {
+                                Log.i(TAG,
+                                        "Zona candidata: centro X="
+                                                + d.centerX
+                                                + ", Y=" + d.centerY
+                                                + ", ancho=" + d.width
+                                                + ", alto=" + d.height);
+                            }
+                        } catch (Exception e) {
+                            Log.e(TAG,
+                                    "Error analizando imagen", e);
+                        } finally {
+                            processingImage = false;
+                        }
                     }
-
-                    // Esta versión comprueba que llegan imágenes.
-                    // Todavía no reconoce ni selecciona personajes.
                 }
             } catch (Exception e) {
-                Log.e(TAG, "Error procesando una imagen", e);
+                Log.e(TAG, "Error recibiendo imagen", e);
+                processingImage = false;
             } finally {
-                if (image != null) {
-                    image.close();
-                }
+                if (image != null) image.close();
             }
         }, imageHandler);
 
@@ -220,6 +257,160 @@ public class ScreenCaptureService extends Service {
         Log.i(TAG, "Captura iniciada: " + width + " x " + height);
     }
 
+    private List<Detection> analyzeImage(Image image) {
+        List<Detection> results = new ArrayList<>();
+
+        int width = image.getWidth();
+        int height = image.getHeight();
+
+        Image.Plane[] planes = image.getPlanes();
+        if (planes == null || planes.length == 0) return results;
+
+        Image.Plane plane = planes[0];
+        ByteBuffer buffer = plane.getBuffer();
+        int rowStride = plane.getRowStride();
+        int pixelStride = plane.getPixelStride();
+
+        Bitmap small = Bitmap.createBitmap(
+                ANALYSIS_WIDTH, ANALYSIS_HEIGHT,
+                Bitmap.Config.ARGB_8888);
+
+        int[] pixels = new int[ANALYSIS_WIDTH * ANALYSIS_HEIGHT];
+
+        for (int y = 0; y < ANALYSIS_HEIGHT; y++) {
+            int sourceY = y * height / ANALYSIS_HEIGHT;
+
+            for (int x = 0; x < ANALYSIS_WIDTH; x++) {
+                int sourceX = x * width / ANALYSIS_WIDTH;
+
+                int offset = sourceY * rowStride
+                        + sourceX * pixelStride;
+
+                if (offset + 3 >= buffer.limit()) {
+                    pixels[y * ANALYSIS_WIDTH + x] = Color.BLACK;
+                    continue;
+                }
+
+                int r = buffer.get(offset) & 0xff;
+                int g = buffer.get(offset + 1) & 0xff;
+                int b = buffer.get(offset + 2) & 0xff;
+                int a = buffer.get(offset + 3) & 0xff;
+
+                pixels[y * ANALYSIS_WIDTH + x] =
+                        Color.argb(a, r, g, b);
+            }
+        }
+
+        small.setPixels(pixels, 0, ANALYSIS_WIDTH,
+                0, 0, ANALYSIS_WIDTH, ANALYSIS_HEIGHT);
+
+        try {
+            boolean[] visited =
+                    new boolean[ANALYSIS_WIDTH * ANALYSIS_HEIGHT];
+
+            ArrayDeque<Integer> queue = new ArrayDeque<>();
+
+            for (int start = 0; start < pixels.length; start++) {
+                if (visited[start] || !isColorful(pixels[start])) {
+                    continue;
+                }
+
+                int minX = ANALYSIS_WIDTH;
+                int minY = ANALYSIS_HEIGHT;
+                int maxX = 0;
+                int maxY = 0;
+                int count = 0;
+
+                queue.clear();
+                queue.add(start);
+                visited[start] = true;
+
+                while (!queue.isEmpty()) {
+                    int index = queue.removeFirst();
+                    int x = index % ANALYSIS_WIDTH;
+                    int y = index / ANALYSIS_WIDTH;
+
+                    count++;
+                    minX = Math.min(minX, x);
+                    minY = Math.min(minY, y);
+                    maxX = Math.max(maxX, x);
+                    maxY = Math.max(maxY, y);
+
+                    // Vecinos de arriba, abajo, izquierda y derecha.
+                    int[] neighbors = {
+                            x > 0 ? index - 1 : -1,
+                            x < ANALYSIS_WIDTH - 1 ? index + 1 : -1,
+                            y > 0 ? index - ANALYSIS_WIDTH : -1,
+                            y < ANALYSIS_HEIGHT - 1
+                                    ? index + ANALYSIS_WIDTH : -1
+                    };
+
+                    for (int next : neighbors) {
+                        if (next >= 0 && !visited[next]
+                                && isColorful(pixels[next])) {
+                            visited[next] = true;
+                            queue.addLast(next);
+                        }
+                    }
+
+                    // Evita que una zona enorme consuma demasiado tiempo.
+                    if (count > 5000) break;
+                }
+
+                int boxWidth = maxX - minX + 1;
+                int boxHeight = maxY - minY + 1;
+
+                // Filtro inicial experimental, no identifica personas.
+                if (count >= 18 && count <= 1800
+                        && boxWidth >= 3 && boxHeight >= 4
+                        && boxWidth <= 70 && boxHeight <= 110) {
+
+                    int centerX = (minX + maxX) / 2
+                            * width / ANALYSIS_WIDTH;
+                    int centerY = (minY + maxY) / 2
+                            * height / ANALYSIS_HEIGHT;
+
+                    results.add(new Detection(
+                            centerX,
+                            centerY,
+                            boxWidth * width / ANALYSIS_WIDTH,
+                            boxHeight * height / ANALYSIS_HEIGHT
+                    ));
+                }
+            }
+        } finally {
+            small.recycle();
+        }
+
+        return results;
+    }
+
+    private boolean isColorful(int color) {
+        int r = Color.red(color);
+        int g = Color.green(color);
+        int b = Color.blue(color);
+
+        int max = Math.max(r, Math.max(g, b));
+        int min = Math.min(r, Math.min(g, b));
+
+        // Excluye píxeles casi grises u oscuros.
+        return max > 95 && (max - min) > 45;
+    }
+
+    private static class Detection {
+        final int centerX;
+        final int centerY;
+        final int width;
+        final int height;
+
+        Detection(int centerX, int centerY, int width, int height) {
+            this.centerX = centerX;
+            this.centerY = centerY;
+            this.width = width;
+            this.height = height;
+        }
+    }
+
     private void releaseCaptureResources() {
         if (imageReader != null) {
             imageReader.setOnImageAvailableListener(null, null);
@@ -240,6 +431,8 @@ public class ScreenCaptureService extends Service {
             imageThread = null;
             imageHandler = null;
         }
+
+        processingImage = false;
 
         if (projection != null) {
             MediaProjection oldProjection = projection;
@@ -285,7 +478,7 @@ public class ScreenCaptureService extends Service {
 
         return builder
                 .setContentTitle("Scg-92 AutoClickerBB")
-                .setContentText("Captura de pantalla activa")
+                .setContentText("Captura y análisis visual activos")
                 .setSmallIcon(android.R.drawable.ic_menu_view)
                 .setOngoing(true)
                 .build();
@@ -301,4 +494,4 @@ public class ScreenCaptureService extends Service {
     public IBinder onBind(Intent intent) {
         return null;
     }
-                            }
+}
