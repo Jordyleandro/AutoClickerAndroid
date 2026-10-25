@@ -1,7 +1,10 @@
+
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
 
     <application
         android:allowBackup="false"
@@ -34,6 +37,12 @@
         <service
             android:name=".FloatingPanelService"
             android:exported="false" />
+
+        <service
+            android:name=".ScreenCaptureService"
+            android:label="Captura de pantalla"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection" />
 
     </application>
 </manifest>
