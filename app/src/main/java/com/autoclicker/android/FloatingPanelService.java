@@ -31,8 +31,8 @@ public class FloatingPanelService extends Service {
     private int markerSize = 48;
     private int clicksPerSecond = 10;
 
-    private static final int MAX_CLICKS_PER_SECOND = 500;
-    private static final int MIN_INTERVAL_MS = 2;
+    private static final int MAX_CLICKS_PER_SECOND = 1500;
+    private static final int MIN_INTERVAL_MS = 1;
 
     @Override
     public void onCreate() {
