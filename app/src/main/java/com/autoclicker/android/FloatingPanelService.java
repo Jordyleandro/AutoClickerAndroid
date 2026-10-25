@@ -14,6 +14,7 @@ import android.view.View;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -22,16 +23,28 @@ public class FloatingPanelService extends Service {
 
     private WindowManager wm;
     private LinearLayout panel;
+    private LinearLayout panelContent;
     private TextView marker;
     private TextView coordinatesLabel;
     private TextView totalClicksLabel;
     private TextView actualSpeedLabel;
+    private TextView widthLabel;
+    private TextView heightLabel;
 
     private WindowManager.LayoutParams panelParams;
     private WindowManager.LayoutParams markerParams;
 
     private int markerSize = 48;
     private int clicksPerSecond = 10;
+
+    // Tamaño inicial del panel en píxeles de pantalla.
+    private int panelWidth = 300;
+    private int panelHeight = 400;
+
+    private static final int MIN_PANEL_WIDTH = 220;
+    private static final int MAX_PANEL_WIDTH = 900;
+    private static final int MIN_PANEL_HEIGHT = 180;
+    private static final int MAX_PANEL_HEIGHT = 1200;
 
     private static final int MAX_CLICKS_PER_SECOND = 1500;
     private static final int MIN_INTERVAL_MS = 1;
@@ -46,8 +59,7 @@ public class FloatingPanelService extends Service {
 
                 if (actualSpeedLabel != null) {
                     actualSpeedLabel.setText(
-                            "Velocidad actual: " + rate
-                                    + " clics/seg"
+                            "Velocidad actual: " + rate + " clics/seg"
                     );
                 }
             };
@@ -73,8 +85,8 @@ public class FloatingPanelService extends Service {
                 : WindowManager.LayoutParams.TYPE_PHONE;
 
         panelParams = new WindowManager.LayoutParams(
-                300,
-                WindowManager.LayoutParams.WRAP_CONTENT,
+                panelWidth,
+                panelHeight,
                 type,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
                 PixelFormat.TRANSLUCENT
@@ -86,43 +98,51 @@ public class FloatingPanelService extends Service {
 
         panel = new LinearLayout(this);
         panel.setOrientation(LinearLayout.VERTICAL);
-        panel.setPadding(12, 12, 12, 12);
-        panel.setBackgroundColor(Color.WHITE);
+        panel.setPadding(8, 8, 8, 8);
+        panel.setBackground(createPanelBackground());
 
+        // Título/asa para mover el panel.
         TextView title = new TextView(this);
-        title.setText("Scg-92 autoclikerbb");
+        title.setText("Scg-92 autoclikerbb  ⋮");
         title.setTextColor(Color.BLACK);
         title.setTextSize(18);
+        title.setPadding(4, 4, 4, 8);
         panel.addView(title);
+        makeDraggable(title, panelParams, panel);
+
+        // Permite desplazar el contenido cuando el panel está pequeño.
+        ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(false);
+
+        panelContent = new LinearLayout(this);
+        panelContent.setOrientation(LinearLayout.VERTICAL);
+        scroll.addView(panelContent);
 
         coordinatesLabel = new TextView(this);
         coordinatesLabel.setTextColor(Color.BLUE);
         coordinatesLabel.setTextSize(16);
         coordinatesLabel.setText("X: -- | Y: --");
-        panel.addView(coordinatesLabel);
+        panelContent.addView(coordinatesLabel);
 
         totalClicksLabel = new TextView(this);
         totalClicksLabel.setTextColor(Color.rgb(0, 120, 0));
         totalClicksLabel.setTextSize(18);
         totalClicksLabel.setText("Clics completados: 0");
-        panel.addView(totalClicksLabel);
+        panelContent.addView(totalClicksLabel);
 
         actualSpeedLabel = new TextView(this);
         actualSpeedLabel.setTextColor(Color.BLACK);
         actualSpeedLabel.setTextSize(16);
         actualSpeedLabel.setText("Velocidad actual: 0 clics/seg");
-        panel.addView(actualSpeedLabel);
+        panelContent.addView(actualSpeedLabel);
 
-        AutoClickService existingService =
-                AutoClickService.getInstance();
-
+        AutoClickService existingService = AutoClickService.getInstance();
         if (existingService != null) {
             existingService.setStatsListener(statsListener);
         }
 
         Button start = new Button(this);
         start.setText("INICIAR CLICS");
-
         start.setOnClickListener(v -> {
             AutoClickService s = AutoClickService.getInstance();
 
@@ -143,15 +163,9 @@ public class FloatingPanelService extends Service {
 
             updateClickPosition();
             s.setStatsListener(statsListener);
-
             s.setInterval(
-                    Math.max(
-                            MIN_INTERVAL_MS,
-                            1000L / clicksPerSecond
-                    )
+                    Math.max(MIN_INTERVAL_MS, 1000L / clicksPerSecond)
             );
-
-            // Reinicia el contador al iniciar.
             s.startClicks();
 
             Toast.makeText(
@@ -160,15 +174,12 @@ public class FloatingPanelService extends Service {
                     Toast.LENGTH_SHORT
             ).show();
         });
-
-        panel.addView(start);
+        panelContent.addView(start);
 
         Button stop = new Button(this);
         stop.setText("DETENER CLICS");
-
         stop.setOnClickListener(v -> {
             AutoClickService s = AutoClickService.getInstance();
-
             if (s != null) {
                 s.stopClicks();
             }
@@ -179,108 +190,183 @@ public class FloatingPanelService extends Service {
                     Toast.LENGTH_SHORT
             ).show();
         });
-
-        panel.addView(stop);
+        panelContent.addView(stop);
 
         TextView speedLabel = new TextView(this);
         speedLabel.setTextColor(Color.BLACK);
         speedLabel.setText("Velocidad configurada: 10 clics/seg");
-        panel.addView(speedLabel);
+        panelContent.addView(speedLabel);
 
         SeekBar speed = new SeekBar(this);
         speed.setMax(MAX_CLICKS_PER_SECOND - 1);
         speed.setProgress(clicksPerSecond - 1);
-
         speed.setOnSeekBarChangeListener(
                 new SeekBar.OnSeekBarChangeListener() {
+                    @Override
+                    public void onProgressChanged(
+                            SeekBar b, int progress, boolean fromUser
+                    ) {
+                        clicksPerSecond = progress + 1;
+                        speedLabel.setText(
+                                "Velocidad configurada: "
+                                        + clicksPerSecond + " clics/seg"
+                        );
 
-            @Override
-            public void onProgressChanged(
-                    SeekBar b,
-                    int progress,
-                    boolean fromUser
-            ) {
-                clicksPerSecond = progress + 1;
+                        AutoClickService s = AutoClickService.getInstance();
+                        if (s != null) {
+                            s.setInterval(
+                                    Math.max(
+                                            MIN_INTERVAL_MS,
+                                            1000L / clicksPerSecond
+                                    )
+                            );
+                        }
+                    }
 
-                speedLabel.setText(
-                        "Velocidad configurada: "
-                                + clicksPerSecond
-                                + " clics/seg"
-                );
+                    @Override
+                    public void onStartTrackingTouch(SeekBar b) {
+                    }
 
-                AutoClickService s =
-                        AutoClickService.getInstance();
-
-                if (s != null) {
-                    s.setInterval(
-                            Math.max(
-                                    MIN_INTERVAL_MS,
-                                    1000L / clicksPerSecond
-                            )
-                    );
-                }
-            }
-
-            @Override
-            public void onStartTrackingTouch(SeekBar b) {
-            }
-
-            @Override
-            public void onStopTrackingTouch(SeekBar b) {
-            }
-        });
-
-        panel.addView(speed);
+                    @Override
+                    public void onStopTrackingTouch(SeekBar b) {
+                    }
+                });
+        panelContent.addView(speed);
 
         TextView sizeLabel = new TextView(this);
         sizeLabel.setTextColor(Color.BLACK);
         sizeLabel.setText("Tamaño del anillo");
-        panel.addView(sizeLabel);
+        panelContent.addView(sizeLabel);
 
-        SeekBar size = new SeekBar(this);
-        size.setMax(100);
-        size.setProgress(28);
-
-        size.setOnSeekBarChangeListener(
+        SeekBar markerSizeSeek = new SeekBar(this);
+        markerSizeSeek.setMax(100);
+        markerSizeSeek.setProgress(markerSize - 20);
+        markerSizeSeek.setOnSeekBarChangeListener(
                 new SeekBar.OnSeekBarChangeListener() {
+                    @Override
+                    public void onProgressChanged(
+                            SeekBar b, int progress, boolean fromUser
+                    ) {
+                        markerSize = progress + 20;
+                        if (marker != null && markerParams != null) {
+                            markerParams.width = markerSize;
+                            markerParams.height = markerSize;
+                            try {
+                                wm.updateViewLayout(marker, markerParams);
+                            } catch (IllegalArgumentException ignored) {
+                            }
+                            updateClickPosition();
+                        }
+                    }
 
-            @Override
-            public void onProgressChanged(
-                    SeekBar b,
-                    int progress,
-                    boolean fromUser
-            ) {
-                markerSize = progress + 20;
+                    @Override
+                    public void onStartTrackingTouch(SeekBar b) {
+                    }
 
-                if (marker != null && markerParams != null) {
-                    markerParams.width = markerSize;
-                    markerParams.height = markerSize;
+                    @Override
+                    public void onStopTrackingTouch(SeekBar b) {
+                    }
+                });
+        panelContent.addView(markerSizeSeek);
 
-                    wm.updateViewLayout(marker, markerParams);
-                    updateClickPosition();
-                }
-            }
+        // Control de ancho del panel.
+        widthLabel = new TextView(this);
+        widthLabel.setTextColor(Color.BLACK);
+        widthLabel.setText("Ancho del panel: " + panelWidth);
+        panelContent.addView(widthLabel);
 
-            @Override
-            public void onStartTrackingTouch(SeekBar b) {
-            }
+        SeekBar widthSeek = new SeekBar(this);
+        widthSeek.setMax(MAX_PANEL_WIDTH - MIN_PANEL_WIDTH);
+        widthSeek.setProgress(panelWidth - MIN_PANEL_WIDTH);
+        widthSeek.setOnSeekBarChangeListener(
+                new SeekBar.OnSeekBarChangeListener() {
+                    @Override
+                    public void onProgressChanged(
+                            SeekBar b, int progress, boolean fromUser
+                    ) {
+                        panelWidth = MIN_PANEL_WIDTH + progress;
+                        widthLabel.setText("Ancho del panel: " + panelWidth);
+                        updatePanelSize();
+                    }
 
-            @Override
-            public void onStopTrackingTouch(SeekBar b) {
-            }
-        });
+                    @Override
+                    public void onStartTrackingTouch(SeekBar b) {
+                    }
 
-        panel.addView(size);
+                    @Override
+                    public void onStopTrackingTouch(SeekBar b) {
+                    }
+                });
+        panelContent.addView(widthSeek);
+
+        // Control de alto del panel.
+        heightLabel = new TextView(this);
+        heightLabel.setTextColor(Color.BLACK);
+        heightLabel.setText("Alto del panel: " + panelHeight);
+        panelContent.addView(heightLabel);
+
+        SeekBar heightSeek = new SeekBar(this);
+        heightSeek.setMax(MAX_PANEL_HEIGHT - MIN_PANEL_HEIGHT);
+        heightSeek.setProgress(panelHeight - MIN_PANEL_HEIGHT);
+        heightSeek.setOnSeekBarChangeListener(
+                new SeekBar.OnSeekBarChangeListener() {
+                    @Override
+                    public void onProgressChanged(
+                            SeekBar b, int progress, boolean fromUser
+                    ) {
+                        panelHeight = MIN_PANEL_HEIGHT + progress;
+                        heightLabel.setText("Alto del panel: " + panelHeight);
+                        updatePanelSize();
+                    }
+
+                    @Override
+                    public void onStartTrackingTouch(SeekBar b) {
+                    }
+
+                    @Override
+                    public void onStopTrackingTouch(SeekBar b) {
+                    }
+                });
+        panelContent.addView(heightSeek);
 
         Button close = new Button(this);
         close.setText("CERRAR PANEL");
         close.setOnClickListener(v -> stopSelf());
-        panel.addView(close);
+        panelContent.addView(close);
+
+        panel.addView(
+                scroll,
+                new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        0,
+                        1f
+                )
+        );
 
         wm.addView(panel, panelParams);
-
         createMarker(type);
-        makeDraggable(panel, panelParams);
+    }
+
+    private GradientDrawable createPanelBackground() {
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(Color.WHITE);
+        bg.setCornerRadius(12);
+        bg.setStroke(2, Color.LTGRAY);
+        return bg;
+    }
+
+    private void updatePanelSize() {
+        if (panel == null || panelParams == null || wm == null) {
+            return;
+        }
+
+        panelParams.width = panelWidth;
+        panelParams.height = panelHeight;
+
+        try {
+            wm.updateViewLayout(panel, panelParams);
+        } catch (IllegalArgumentException ignored) {
+        }
     }
 
     private void createMarker(int type) {
@@ -293,7 +379,6 @@ public class FloatingPanelService extends Service {
         bg.setColor(Color.TRANSPARENT);
         bg.setShape(GradientDrawable.OVAL);
         bg.setStroke(4, Color.YELLOW);
-
         marker.setBackground(bg);
 
         markerParams = new WindowManager.LayoutParams(
@@ -310,8 +395,7 @@ public class FloatingPanelService extends Service {
         markerParams.y = 500;
 
         wm.addView(marker, markerParams);
-
-        makeDraggable(marker, markerParams);
+        makeDraggable(marker, markerParams, marker);
         updateClickPosition();
     }
 
@@ -324,24 +408,21 @@ public class FloatingPanelService extends Service {
         int y = markerParams.y + markerSize / 2;
 
         if (coordinatesLabel != null) {
-            coordinatesLabel.setText(
-                    "X: " + x + " | Y: " + y
-            );
+            coordinatesLabel.setText("X: " + x + " | Y: " + y);
         }
 
         AutoClickService s = AutoClickService.getInstance();
-
         if (s != null) {
             s.setPosition(x, y);
         }
     }
 
     private void makeDraggable(
-            View view,
-            WindowManager.LayoutParams params
+            View touchView,
+            WindowManager.LayoutParams params,
+            View viewToMove
     ) {
-        view.setOnTouchListener(new View.OnTouchListener() {
-
+        touchView.setOnTouchListener(new View.OnTouchListener() {
             private int startX;
             private int startY;
             private int originalX;
@@ -360,22 +441,22 @@ public class FloatingPanelService extends Service {
                 if (event.getAction() == MotionEvent.ACTION_MOVE) {
                     params.x = originalX
                             + (int) event.getRawX() - startX;
-
                     params.y = originalY
                             + (int) event.getRawY() - startY;
 
-                    wm.updateViewLayout(view, params);
-
-                    if (view == marker) {
-                        updateClickPosition();
+                    try {
+                        wm.updateViewLayout(viewToMove, params);
+                    } catch (IllegalArgumentException ignored) {
                     }
 
+                    if (viewToMove == marker) {
+                        updateClickPosition();
+                    }
                     return true;
                 }
 
                 return event.getAction() == MotionEvent.ACTION_UP
-                        || event.getAction()
-                        == MotionEvent.ACTION_CANCEL;
+                        || event.getAction() == MotionEvent.ACTION_CANCEL;
             }
         });
     }
@@ -383,7 +464,6 @@ public class FloatingPanelService extends Service {
     @Override
     public void onDestroy() {
         AutoClickService s = AutoClickService.getInstance();
-
         if (s != null) {
             s.stopClicks();
             s.setStatsListener(null);
@@ -393,7 +473,6 @@ public class FloatingPanelService extends Service {
             if (panel != null && panel.isAttachedToWindow()) {
                 wm.removeView(panel);
             }
-
             if (marker != null && marker.isAttachedToWindow()) {
                 wm.removeView(marker);
             }
@@ -403,16 +482,15 @@ public class FloatingPanelService extends Service {
         marker = null;
         totalClicksLabel = null;
         actualSpeedLabel = null;
+        coordinatesLabel = null;
+        widthLabel = null;
+        heightLabel = null;
 
         super.onDestroy();
     }
 
     @Override
-    public int onStartCommand(
-            Intent intent,
-            int flags,
-            int id
-    ) {
+    public int onStartCommand(Intent intent, int flags, int id) {
         return START_STICKY;
     }
 
