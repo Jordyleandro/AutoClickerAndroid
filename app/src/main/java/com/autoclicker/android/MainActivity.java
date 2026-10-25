@@ -16,13 +16,27 @@ import android.widget.Toast;
 
 public class MainActivity extends Activity {
 
+    public static final String ACTION_START_DETECTION =
+            "com.autoclicker.android.START_DETECTION";
+
     private static final int REQUEST_SCREEN_CAPTURE = 902;
     private TextView status;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        createInterface();
+        handleDetectionRequest(getIntent());
+    }
 
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handleDetectionRequest(intent);
+    }
+
+    private void createInterface() {
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
         layout.setGravity(Gravity.CENTER);
@@ -44,9 +58,9 @@ public class MainActivity extends Activity {
         Button accessibility = new Button(this);
         accessibility.setText("Activar accesibilidad");
         accessibility.setOnClickListener(v ->
-            startActivity(new Intent(
-                Settings.ACTION_ACCESSIBILITY_SETTINGS
-            ))
+                startActivity(new Intent(
+                        Settings.ACTION_ACCESSIBILITY_SETTINGS
+                ))
         );
         layout.addView(accessibility);
 
@@ -55,14 +69,14 @@ public class MainActivity extends Activity {
         overlay.setOnClickListener(v -> {
             if (!Settings.canDrawOverlays(this)) {
                 Intent intent = new Intent(
-                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                    Uri.parse("package:" + getPackageName())
+                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Uri.parse("package:" + getPackageName())
                 );
                 startActivity(intent);
             } else {
                 Toast.makeText(this,
-                    "El permiso del panel ya está concedido",
-                    Toast.LENGTH_SHORT).show();
+                        "El permiso del panel ya está concedido",
+                        Toast.LENGTH_SHORT).show();
             }
         });
         layout.addView(overlay);
@@ -72,12 +86,12 @@ public class MainActivity extends Activity {
         open.setOnClickListener(v -> {
             if (Settings.canDrawOverlays(this)) {
                 startService(new Intent(
-                    this, FloatingPanelService.class
+                        this, FloatingPanelService.class
                 ));
             } else {
                 startActivity(new Intent(
-                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                    Uri.parse("package:" + getPackageName())
+                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Uri.parse("package:" + getPackageName())
                 ));
             }
         });
@@ -96,11 +110,20 @@ public class MainActivity extends Activity {
         setContentView(layout);
     }
 
+    private void handleDetectionRequest(Intent intent) {
+        if (intent == null) return;
+
+        if (ACTION_START_DETECTION.equals(intent.getAction())) {
+            intent.setAction(null);
+            requestScreenCapture();
+        }
+    }
+
     private void requestScreenCapture() {
         MediaProjectionManager manager =
-            (MediaProjectionManager) getSystemService(
-                Context.MEDIA_PROJECTION_SERVICE
-            );
+                (MediaProjectionManager) getSystemService(
+                        Context.MEDIA_PROJECTION_SERVICE
+                );
 
         if (manager == null) {
             status.setText("Error: captura no disponible");
@@ -111,20 +134,17 @@ public class MainActivity extends Activity {
 
         Intent captureIntent = manager.createScreenCaptureIntent();
         startActivityForResult(
-            captureIntent,
-            REQUEST_SCREEN_CAPTURE
+                captureIntent,
+                REQUEST_SCREEN_CAPTURE
         );
     }
 
     @Override
     protected void onActivityResult(
-        int requestCode, int resultCode, Intent data
-    ) {
+            int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
 
-        if (requestCode != REQUEST_SCREEN_CAPTURE) {
-            return;
-        }
+        if (requestCode != REQUEST_SCREEN_CAPTURE) return;
 
         if (resultCode != RESULT_OK || data == null) {
             status.setText("Captura cancelada: falta autorización");
@@ -132,16 +152,16 @@ public class MainActivity extends Activity {
         }
 
         Intent serviceIntent = new Intent(
-            this, ScreenCaptureService.class
+                this, ScreenCaptureService.class
         );
         serviceIntent.setAction(ScreenCaptureService.ACTION_START);
         serviceIntent.putExtra(
-            ScreenCaptureService.EXTRA_RESULT_CODE,
-            resultCode
+                ScreenCaptureService.EXTRA_RESULT_CODE,
+                resultCode
         );
         serviceIntent.putExtra(
-            ScreenCaptureService.EXTRA_RESULT_DATA,
-            data
+                ScreenCaptureService.EXTRA_RESULT_DATA,
+                data
         );
 
         try {
@@ -151,19 +171,17 @@ public class MainActivity extends Activity {
                 startService(serviceIntent);
             }
 
-            status.setText(
-                "Solicitud enviada. Comprueba la notificación de captura."
-            );
+            status.setText("Captura iniciada; vuelve al juego.");
         } catch (Exception e) {
             status.setText(
-                "No se pudo iniciar la captura: " + e.getMessage()
+                    "No se pudo iniciar la captura: " + e.getMessage()
             );
         }
     }
 
     private void stopScreenCapture() {
         Intent stopIntent = new Intent(
-            this, ScreenCaptureService.class
+                this, ScreenCaptureService.class
         );
         stopIntent.setAction(ScreenCaptureService.ACTION_STOP);
 
@@ -171,7 +189,9 @@ public class MainActivity extends Activity {
             startService(stopIntent);
             status.setText("Solicitud de detener enviada");
         } catch (Exception e) {
-            status.setText("No se pudo detener: " + e.getMessage());
+            status.setText(
+                    "No se pudo detener: " + e.getMessage()
+            );
         }
     }
 }
