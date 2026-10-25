@@ -101,21 +101,18 @@ public class FloatingPanelService extends Service {
         coordinatesLabel.setText("X: -- | Y: --");
         panel.addView(coordinatesLabel);
 
-        // Contador de clics completados
         totalClicksLabel = new TextView(this);
         totalClicksLabel.setTextColor(Color.rgb(0, 120, 0));
         totalClicksLabel.setTextSize(18);
         totalClicksLabel.setText("Clics completados: 0");
         panel.addView(totalClicksLabel);
 
-        // Velocidad real informada por el servicio
         actualSpeedLabel = new TextView(this);
         actualSpeedLabel.setTextColor(Color.BLACK);
         actualSpeedLabel.setTextSize(16);
         actualSpeedLabel.setText("Velocidad actual: 0 clics/seg");
         panel.addView(actualSpeedLabel);
 
-        // Conectar el contador con el servicio de accesibilidad
         AutoClickService existingService =
                 AutoClickService.getInstance();
 
@@ -145,8 +142,6 @@ public class FloatingPanelService extends Service {
             }
 
             updateClickPosition();
-
-            // Conectar las estadísticas antes de iniciar
             s.setStatsListener(statsListener);
 
             s.setInterval(
@@ -156,7 +151,7 @@ public class FloatingPanelService extends Service {
                     )
             );
 
-            // startClicks() reinicia las estadísticas a cero
+            // Reinicia el contador al iniciar.
             s.startClicks();
 
             Toast.makeText(
@@ -239,7 +234,7 @@ public class FloatingPanelService extends Service {
 
         TextView sizeLabel = new TextView(this);
         sizeLabel.setTextColor(Color.BLACK);
-        sizeLabel.setText("Tamaño del punto");
+        sizeLabel.setText("Tamaño del anillo");
         panel.addView(sizeLabel);
 
         SeekBar size = new SeekBar(this);
@@ -260,7 +255,6 @@ public class FloatingPanelService extends Service {
                 if (marker != null && markerParams != null) {
                     markerParams.width = markerSize;
                     markerParams.height = markerSize;
-                    marker.setTextSize(markerSize / 2f);
 
                     wm.updateViewLayout(marker, markerParams);
                     updateClickPosition();
@@ -291,15 +285,15 @@ public class FloatingPanelService extends Service {
 
     private void createMarker(int type) {
         marker = new TextView(this);
-        marker.setText("●");
-        marker.setTextSize(markerSize / 2f);
+        marker.setText("");
         marker.setGravity(Gravity.CENTER);
-        marker.setTextColor(Color.RED);
 
+        // Anillo amarillo con centro transparente.
         GradientDrawable bg = new GradientDrawable();
-        bg.setColor(0x22FF0000);
+        bg.setColor(Color.TRANSPARENT);
         bg.setShape(GradientDrawable.OVAL);
-        bg.setStroke(2, Color.RED);
+        bg.setStroke(4, Color.YELLOW);
+
         marker.setBackground(bg);
 
         markerParams = new WindowManager.LayoutParams(
