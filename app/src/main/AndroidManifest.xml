@@ -6,7 +6,7 @@
     <application
         android:allowBackup="false"
         android:label="Scg-92 autoclikerbb"
-        android:icon="@mipmap/ic_launcher"
+        android:icon="@android:drawable/sym_def_app_icon"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
 
         <activity
