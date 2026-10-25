@@ -26,9 +26,9 @@ public class FloatingPanelService extends Service {
     private LinearLayout panel;
     private LinearLayout content;
     private TextView marker;
-    private TextView coordinatesLabel;
     private TextView totalClicksLabel;
     private TextView actualSpeedLabel;
+    private TextView configuredSpeedLabel;
 
     private WindowManager.LayoutParams panelParams;
     private WindowManager.LayoutParams markerParams;
@@ -37,7 +37,7 @@ public class FloatingPanelService extends Service {
     private int clicksPerSecond = 10;
 
     private int panelWidth = 300;
-    private int panelHeight = 400;
+    private int panelHeight = 440;
 
     private int screenWidth;
     private int screenHeight;
@@ -45,19 +45,18 @@ public class FloatingPanelService extends Service {
     private static final int MIN_PANEL_WIDTH = 200;
     private static final int MIN_PANEL_HEIGHT = 180;
     private static final int MAX_CLICKS_PER_SECOND = 1500;
+    private static final int MIN_CLICKS_PER_SECOND = 1;
     private static final int MIN_INTERVAL_MS = 1;
 
     private final AutoClickService.StatsListener statsListener =
             (total, rate) -> {
                 if (totalClicksLabel != null) {
-                    totalClicksLabel.setText(
-                            "Clics completados: " + total
-                    );
+                    totalClicksLabel.setText("Clics: " + total);
                 }
 
                 if (actualSpeedLabel != null) {
                     actualSpeedLabel.setText(
-                            "Velocidad actual: " + rate + " clics/seg"
+                            "Velocidad actual: " + rate + "/seg"
                     );
                 }
             };
@@ -106,9 +105,8 @@ public class FloatingPanelService extends Service {
         panel.setPadding(8, 8, 8, 4);
         panel.setBackground(createPanelBackground());
 
-        // Encabezado: arrástralo para mover el panel.
         TextView title = new TextView(this);
-        title.setText("Scg-92 autoclikerbb");
+        title.setText("Scg-92 AutoClickerBB");
         title.setTextColor(Color.BLACK);
         title.setTextSize(17);
         title.setGravity(Gravity.CENTER_VERTICAL);
@@ -125,22 +123,16 @@ public class FloatingPanelService extends Service {
         content.setOrientation(LinearLayout.VERTICAL);
         scroll.addView(content);
 
-        coordinatesLabel = new TextView(this);
-        coordinatesLabel.setTextColor(Color.BLUE);
-        coordinatesLabel.setTextSize(16);
-        coordinatesLabel.setText("X: -- | Y: --");
-        content.addView(coordinatesLabel);
-
         totalClicksLabel = new TextView(this);
         totalClicksLabel.setTextColor(Color.rgb(0, 120, 0));
-        totalClicksLabel.setTextSize(18);
-        totalClicksLabel.setText("Clics completados: 0");
+        totalClicksLabel.setTextSize(16);
+        totalClicksLabel.setText("Clics: 0");
         content.addView(totalClicksLabel);
 
         actualSpeedLabel = new TextView(this);
-        actualSpeedLabel.setTextColor(Color.BLACK);
-        actualSpeedLabel.setTextSize(16);
-        actualSpeedLabel.setText("Velocidad actual: 0 clics/seg");
+        actualSpeedLabel.setTextColor(Color.DKGRAY);
+        actualSpeedLabel.setTextSize(14);
+        actualSpeedLabel.setText("Velocidad actual: 0/seg");
         content.addView(actualSpeedLabel);
 
         AutoClickService existing = AutoClickService.getInstance();
@@ -148,8 +140,28 @@ public class FloatingPanelService extends Service {
             existing.setStatsListener(statsListener);
         }
 
+        // Botones compactos de clics.
+        LinearLayout clickButtons = new LinearLayout(this);
+        clickButtons.setOrientation(LinearLayout.HORIZONTAL);
+
         Button start = new Button(this);
-        start.setText("INICIAR CLICS");
+        start.setText("▶");
+        start.setTextSize(22);
+        start.setContentDescription("Iniciar clics");
+        clickButtons.addView(start, new LinearLayout.LayoutParams(
+                0, dp(52), 1f
+        ));
+
+        Button stop = new Button(this);
+        stop.setText("■");
+        stop.setTextSize(22);
+        stop.setContentDescription("Detener clics");
+        clickButtons.addView(stop, new LinearLayout.LayoutParams(
+                0, dp(52), 1f
+        ));
+
+        content.addView(clickButtons);
+
         start.setOnClickListener(v -> {
             AutoClickService s = AutoClickService.getInstance();
 
@@ -170,21 +182,16 @@ public class FloatingPanelService extends Service {
 
             updateClickPosition();
             s.setStatsListener(statsListener);
-            s.setInterval(
-                    Math.max(MIN_INTERVAL_MS, 1000L / clicksPerSecond)
-            );
+            s.setInterval(Math.max(
+                    MIN_INTERVAL_MS, 1000L / clicksPerSecond
+            ));
             s.startClicks();
 
             Toast.makeText(
-                    this,
-                    "Clics iniciados desde cero",
-                    Toast.LENGTH_SHORT
+                    this, "Clics iniciados", Toast.LENGTH_SHORT
             ).show();
         });
-        content.addView(start);
 
-        Button stop = new Button(this);
-        stop.setText("DETENER CLICS");
         stop.setOnClickListener(v -> {
             AutoClickService s = AutoClickService.getInstance();
             if (s != null) {
@@ -192,55 +199,40 @@ public class FloatingPanelService extends Service {
             }
 
             Toast.makeText(
-                    this,
-                    "Clics detenidos",
-                    Toast.LENGTH_SHORT
+                    this, "Clics detenidos", Toast.LENGTH_SHORT
             ).show();
         });
-        content.addView(stop);
 
-        TextView speedLabel = new TextView(this);
-        speedLabel.setTextColor(Color.BLACK);
-        speedLabel.setText("Velocidad configurada: 10 clics/seg");
-        content.addView(speedLabel);
+        // Velocidad ajustada con botones - y +.
+        configuredSpeedLabel = new TextView(this);
+        configuredSpeedLabel.setTextColor(Color.BLACK);
+        configuredSpeedLabel.setTextSize(15);
+        configuredSpeedLabel.setGravity(Gravity.CENTER);
+        updateConfiguredSpeedLabel();
+        content.addView(configuredSpeedLabel);
 
-        SeekBar speed = new SeekBar(this);
-        speed.setMax(MAX_CLICKS_PER_SECOND - 1);
-        speed.setProgress(clicksPerSecond - 1);
+        LinearLayout speedButtons = new LinearLayout(this);
+        speedButtons.setOrientation(LinearLayout.HORIZONTAL);
+        speedButtons.setGravity(Gravity.CENTER);
 
-        speed.setOnSeekBarChangeListener(
-                new SeekBar.OnSeekBarChangeListener() {
-                    @Override
-                    public void onProgressChanged(
-                            SeekBar b, int progress, boolean fromUser
-                    ) {
-                        clicksPerSecond = progress + 1;
-                        speedLabel.setText(
-                                "Velocidad configurada: "
-                                        + clicksPerSecond + " clics/seg"
-                        );
+        Button slower = new Button(this);
+        slower.setText("−");
+        slower.setTextSize(24);
+        speedButtons.addView(slower, new LinearLayout.LayoutParams(
+                0, dp(48), 1f
+        ));
 
-                        AutoClickService s =
-                                AutoClickService.getInstance();
-                        if (s != null) {
-                            s.setInterval(
-                                    Math.max(
-                                            MIN_INTERVAL_MS,
-                                            1000L / clicksPerSecond
-                                    )
-                            );
-                        }
-                    }
+        Button faster = new Button(this);
+        faster.setText("+");
+        faster.setTextSize(24);
+        speedButtons.addView(faster, new LinearLayout.LayoutParams(
+                0, dp(48), 1f
+        ));
 
-                    @Override
-                    public void onStartTrackingTouch(SeekBar b) {
-                    }
+        content.addView(speedButtons);
 
-                    @Override
-                    public void onStopTrackingTouch(SeekBar b) {
-                    }
-                });
-        content.addView(speed);
+        slower.setOnClickListener(v -> changeSpeed(-1));
+        faster.setOnClickListener(v -> changeSpeed(1));
 
         TextView markerLabel = new TextView(this);
         markerLabel.setTextColor(Color.BLACK);
@@ -282,8 +274,56 @@ public class FloatingPanelService extends Service {
                 });
         content.addView(markerSizeSeek);
 
+        // La captura necesita autorización de Android.
+        Button startDetection = new Button(this);
+        startDetection.setText("👁 Detectar");
+        startDetection.setContentDescription("Iniciar detección");
+        content.addView(startDetection);
+
+        startDetection.setOnClickListener(v -> {
+            Intent intent = new Intent(this, MainActivity.class);
+            intent.addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK
+                            | Intent.FLAG_ACTIVITY_SINGLE_TOP
+            );
+            intent.setAction("com.autoclicker.android.REQUEST_CAPTURE");
+            startActivity(intent);
+
+            Toast.makeText(
+                    this,
+                    "Abre Iniciar detección en la pantalla principal",
+                    Toast.LENGTH_LONG
+            ).show();
+        });
+
+        Button stopDetection = new Button(this);
+        stopDetection.setText("■ Parar detección");
+        content.addView(stopDetection);
+
+        stopDetection.setOnClickListener(v -> {
+            Intent intent = new Intent(
+                    this, ScreenCaptureService.class
+            );
+            intent.setAction(ScreenCaptureService.ACTION_STOP);
+
+            try {
+                startService(intent);
+                Toast.makeText(
+                        this,
+                        "Solicitud de detener detección enviada",
+                        Toast.LENGTH_SHORT
+                ).show();
+            } catch (Exception e) {
+                Toast.makeText(
+                        this,
+                        "No se pudo detener la captura",
+                        Toast.LENGTH_LONG
+                ).show();
+            }
+        });
+
         Button close = new Button(this);
-        close.setText("CERRAR PANEL");
+        close.setText("✕ Cerrar");
         close.setOnClickListener(v -> stopSelf());
         content.addView(close);
 
@@ -296,33 +336,28 @@ public class FloatingPanelService extends Service {
                 )
         );
 
-        // Esquina inferior derecha para cambiar el tamaño,
-        // como el tirador de un marco de recorte.
         FrameLayout resizeArea = new FrameLayout(this);
-        resizeArea.setMinimumHeight(32);
+        resizeArea.setMinimumHeight(dp(32));
 
         TextView resizeHandle = new TextView(this);
         resizeHandle.setText("◢");
         resizeHandle.setTextColor(Color.DKGRAY);
         resizeHandle.setTextSize(25);
         resizeHandle.setGravity(Gravity.CENTER);
-        resizeHandle.setContentDescription("Arrastrar para cambiar tamaño");
+        resizeHandle.setContentDescription(
+                "Arrastrar para cambiar tamaño"
+        );
 
         FrameLayout.LayoutParams handleParams =
                 new FrameLayout.LayoutParams(
-                        44,
-                        32,
+                        dp(44), dp(32),
                         Gravity.RIGHT | Gravity.BOTTOM
                 );
 
         resizeArea.addView(resizeHandle, handleParams);
-        panel.addView(
-                resizeArea,
-                new LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT,
-                        32
-                )
-        );
+        panel.addView(resizeArea, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(32)
+        ));
 
         makeResizable(resizeHandle);
 
@@ -330,11 +365,41 @@ public class FloatingPanelService extends Service {
         createMarker(type);
     }
 
+    private int dp(int value) {
+        return (int) (value * getResources()
+                .getDisplayMetrics().density + 0.5f);
+    }
+
+    private void changeSpeed(int change) {
+        clicksPerSecond = clamp(
+                clicksPerSecond + change,
+                MIN_CLICKS_PER_SECOND,
+                MAX_CLICKS_PER_SECOND
+        );
+
+        updateConfiguredSpeedLabel();
+
+        AutoClickService s = AutoClickService.getInstance();
+        if (s != null) {
+            s.setInterval(Math.max(
+                    MIN_INTERVAL_MS, 1000L / clicksPerSecond
+            ));
+        }
+    }
+
+    private void updateConfiguredSpeedLabel() {
+        if (configuredSpeedLabel != null) {
+            configuredSpeedLabel.setText(
+                    "Velocidad: " + clicksPerSecond + " clics/seg"
+            );
+        }
+    }
+
     private GradientDrawable createPanelBackground() {
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(Color.WHITE);
-        bg.setCornerRadius(8);
-        bg.setStroke(2, Color.LTGRAY);
+        bg.setCornerRadius(dp(8));
+        bg.setStroke(dp(2), Color.LTGRAY);
         return bg;
     }
 
@@ -361,13 +426,13 @@ public class FloatingPanelService extends Service {
 
                         panelWidth = clamp(
                                 originalWidth + dx,
-                                MIN_PANEL_WIDTH,
+                                dp(MIN_PANEL_WIDTH),
                                 screenWidth
                         );
 
                         panelHeight = clamp(
                                 originalHeight + dy,
-                                MIN_PANEL_HEIGHT,
+                                dp(MIN_PANEL_HEIGHT),
                                 screenHeight
                         );
 
@@ -403,7 +468,7 @@ public class FloatingPanelService extends Service {
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(Color.TRANSPARENT);
         bg.setShape(GradientDrawable.OVAL);
-        bg.setStroke(4, Color.YELLOW);
+        bg.setStroke(dp(4), Color.YELLOW);
         marker.setBackground(bg);
 
         markerParams = new WindowManager.LayoutParams(
@@ -431,10 +496,6 @@ public class FloatingPanelService extends Service {
 
         int x = markerParams.x + markerSize / 2;
         int y = markerParams.y + markerSize / 2;
-
-        if (coordinatesLabel != null) {
-            coordinatesLabel.setText("X: " + x + " | Y: " + y);
-        }
 
         AutoClickService s = AutoClickService.getInstance();
         if (s != null) {
@@ -506,9 +567,9 @@ public class FloatingPanelService extends Service {
 
         panel = null;
         marker = null;
-        coordinatesLabel = null;
         totalClicksLabel = null;
         actualSpeedLabel = null;
+        configuredSpeedLabel = null;
 
         super.onDestroy();
     }
