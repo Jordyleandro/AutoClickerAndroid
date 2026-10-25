@@ -25,7 +25,6 @@ public class ScreenCaptureService extends Service {
 
     public static final String ACTION_START =
             "com.autoclicker.android.SCREEN_CAPTURE_START";
-
     public static final String ACTION_STOP =
             "com.autoclicker.android.SCREEN_CAPTURE_STOP";
 
@@ -42,7 +41,6 @@ public class ScreenCaptureService extends Service {
     private HandlerThread imageThread;
     private Handler imageHandler;
 
-    private boolean running = false;
     private long lastLogTime = 0L;
 
     @Override
@@ -65,9 +63,7 @@ public class ScreenCaptureService extends Service {
         }
 
         int resultCode = intent.getIntExtra(
-                EXTRA_RESULT_CODE,
-                Activity.RESULT_CANCELED
-        );
+                EXTRA_RESULT_CODE, Activity.RESULT_CANCELED);
 
         Intent resultData = getResultIntent(intent);
 
@@ -82,8 +78,7 @@ public class ScreenCaptureService extends Service {
                 startForeground(
                         NOTIFICATION_ID,
                         buildNotification(),
-                        ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
-                );
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION);
             } else {
                 startForeground(NOTIFICATION_ID, buildNotification());
             }
@@ -102,35 +97,30 @@ public class ScreenCaptureService extends Service {
     @SuppressWarnings("deprecation")
     private Intent getResultIntent(Intent source) {
         if (Build.VERSION.SDK_INT >= 33) {
-            return source.getParcelableExtra(
-                    EXTRA_RESULT_DATA,
-                    Intent.class
-            );
+            return source.getParcelableExtra(EXTRA_RESULT_DATA, Intent.class);
         }
-
         return source.getParcelableExtra(EXTRA_RESULT_DATA);
     }
 
     private void startCapture(int resultCode, Intent resultData) {
-        stopCapture();
+        // Limpiar recursos anteriores sin detener la notificación
+        // del servicio que acabamos de iniciar.
+        releaseCaptureResources();
 
         MediaProjectionManager manager =
                 (MediaProjectionManager) getSystemService(
-                        Context.MEDIA_PROJECTION_SERVICE
-                );
+                        Context.MEDIA_PROJECTION_SERVICE);
 
         if (manager == null) {
             throw new IllegalStateException(
-                    "MediaProjectionManager no disponible"
-            );
+                    "MediaProjectionManager no disponible");
         }
 
         projection = manager.getMediaProjection(resultCode, resultData);
 
         if (projection == null) {
             throw new IllegalStateException(
-                    "No se pudo obtener MediaProjection"
-            );
+                    "No se pudo obtener MediaProjection");
         }
 
         android.util.DisplayMetrics metrics =
@@ -138,13 +128,10 @@ public class ScreenCaptureService extends Service {
 
         android.view.WindowManager windowManager =
                 (android.view.WindowManager) getSystemService(
-                        Context.WINDOW_SERVICE
-                );
+                        Context.WINDOW_SERVICE);
 
         if (windowManager == null) {
-            throw new IllegalStateException(
-                    "WindowManager no disponible"
-            );
+            throw new IllegalStateException("WindowManager no disponible");
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -153,8 +140,8 @@ public class ScreenCaptureService extends Service {
 
             metrics.widthPixels = bounds.width();
             metrics.heightPixels = bounds.height();
-            metrics.densityDpi = getResources()
-                    .getDisplayMetrics().densityDpi;
+            metrics.densityDpi =
+                    getResources().getDisplayMetrics().densityDpi;
         } else {
             windowManager.getDefaultDisplay().getRealMetrics(metrics);
         }
@@ -165,16 +152,11 @@ public class ScreenCaptureService extends Service {
 
         if (width <= 0 || height <= 0 || density <= 0) {
             throw new IllegalStateException(
-                    "Dimensiones de pantalla inválidas"
-            );
+                    "Dimensiones de pantalla inválidas");
         }
 
         imageReader = ImageReader.newInstance(
-                width,
-                height,
-                PixelFormat.RGBA_8888,
-                2
-        );
+                width, height, PixelFormat.RGBA_8888, 2);
 
         imageThread = new HandlerThread("ScreenCaptureThread");
         imageThread.start();
@@ -189,22 +171,15 @@ public class ScreenCaptureService extends Service {
                 if (image != null) {
                     long now = android.os.SystemClock.elapsedRealtime();
 
-                    // Registrar como máximo una vez cada 3 segundos.
                     if (now - lastLogTime >= 3000L) {
                         lastLogTime = now;
-
-                        Log.d(
-                                TAG,
-                                "Captura recibida correctamente: "
-                                        + image.getWidth()
-                                        + " x "
-                                        + image.getHeight()
-                        );
+                        Log.d(TAG, "Captura recibida correctamente: "
+                                + image.getWidth() + " x "
+                                + image.getHeight());
                     }
 
-                    // Próximo paso: analizar visualmente los personajes.
-                    // Por ahora no se envían toques automáticos.
-
+                    // Esta versión comprueba que llegan imágenes.
+                    // Todavía no reconoce ni selecciona personajes.
                 }
             } catch (Exception e) {
                 Log.e(TAG, "Error procesando una imagen", e);
@@ -220,12 +195,12 @@ public class ScreenCaptureService extends Service {
                     @Override
                     public void onStop() {
                         Log.i(TAG, "Permiso de captura finalizado");
-                        stopCapture();
+                        releaseCaptureResources();
+                        stopForeground(true);
                         stopSelf();
                     }
                 },
-                new Handler(getMainLooper())
-        );
+                new Handler(getMainLooper()));
 
         virtualDisplay = projection.createVirtualDisplay(
                 "AutoClickerScreen",
@@ -235,25 +210,17 @@ public class ScreenCaptureService extends Service {
                 DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
                 imageReader.getSurface(),
                 null,
-                imageHandler
-        );
+                imageHandler);
 
         if (virtualDisplay == null) {
             throw new IllegalStateException(
-                    "No se pudo crear la pantalla virtual"
-            );
+                    "No se pudo crear la pantalla virtual");
         }
 
-        running = true;
-        Log.i(
-                TAG,
-                "Captura iniciada: " + width + " x " + height
-        );
+        Log.i(TAG, "Captura iniciada: " + width + " x " + height);
     }
 
-    private void stopCapture() {
-        running = false;
-
+    private void releaseCaptureResources() {
         if (imageReader != null) {
             imageReader.setOnImageAvailableListener(null, null);
         }
@@ -284,7 +251,10 @@ public class ScreenCaptureService extends Service {
                 Log.w(TAG, "La captura ya estaba detenida", e);
             }
         }
+    }
 
+    private void stopCapture() {
+        releaseCaptureResources();
         stopForeground(true);
     }
 
@@ -293,8 +263,7 @@ public class ScreenCaptureService extends Service {
             NotificationChannel channel = new NotificationChannel(
                     CHANNEL_ID,
                     "Captura de pantalla",
-                    NotificationManager.IMPORTANCE_LOW
-            );
+                    NotificationManager.IMPORTANCE_LOW);
 
             NotificationManager manager =
                     getSystemService(NotificationManager.class);
@@ -332,4 +301,4 @@ public class ScreenCaptureService extends Service {
     public IBinder onBind(Intent intent) {
         return null;
     }
-}
+                            }
