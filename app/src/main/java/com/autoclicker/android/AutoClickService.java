@@ -16,8 +16,8 @@ public class AutoClickService extends AccessibilityService {
 
     private static final String TAG = "AutoClicker";
 
-    // Duración del toque: antes era 10 ms.
-    private static final long GESTURE_DURATION_MS = 60L;
+    private static final long GESTURE_DURATION_MS = 100L;
+    private static final float MOVE_DISTANCE = 1.0f;
 
     private static AutoClickService instance;
 
@@ -33,6 +33,8 @@ public class AutoClickService extends AccessibilityService {
     private boolean gesturePending = false;
 
     private long completedClicks = 0L;
+    private long cancelledGestures = 0L;
+
     private long rateWindowStart = 0L;
     private int clicksInWindow = 0;
     private int clicksPerSecond = 0;
@@ -52,6 +54,7 @@ public class AutoClickService extends AccessibilityService {
     @Override
     protected void onServiceConnected() {
         super.onServiceConnected();
+
         instance = this;
 
         try {
@@ -60,14 +63,14 @@ public class AutoClickService extends AccessibilityService {
                     70
             );
         } catch (RuntimeException e) {
-            Log.e(TAG, "No se pudo iniciar el sonido", e);
+            Log.e(TAG, "Error iniciando sonido", e);
         }
 
-        Log.i(TAG, "Servicio de accesibilidad conectado");
+        Log.i(TAG, "Servicio conectado");
 
         Toast.makeText(
                 this,
-                "Servicio AutoClicker conectado",
+                "AutoClicker conectado",
                 Toast.LENGTH_SHORT
         ).show();
     }
@@ -87,9 +90,11 @@ public class AutoClickService extends AccessibilityService {
 
     public void resetStats() {
         completedClicks = 0L;
+        cancelledGestures = 0L;
         clicksPerSecond = 0;
         clicksInWindow = 0;
         rateWindowStart = SystemClock.elapsedRealtime();
+
         notifyStats();
     }
 
@@ -123,9 +128,9 @@ public class AutoClickService extends AccessibilityService {
 
         Log.i(
                 TAG,
-                "Clics iniciados: X=" + clickX
-                        + ", Y=" + clickY
-                        + ", intervalo=" + interval + " ms"
+                "Inicio: X=" + clickX
+                        + " Y=" + clickY
+                        + " intervalo=" + interval
         );
 
         handler.removeCallbacks(clickRunnable);
@@ -136,23 +141,38 @@ public class AutoClickService extends AccessibilityService {
         clicking = false;
         handler.removeCallbacks(clickRunnable);
 
-        Log.i(TAG, "Clics detenidos");
+        Log.i(
+                TAG,
+                "Detenido. Completados="
+                        + completedClicks
+                        + " Cancelados="
+                        + cancelledGestures
+        );
     }
 
     private final Runnable clickRunnable = new Runnable() {
         @Override
         public void run() {
+
             if (!clicking || gesturePending) {
                 return;
             }
 
+            final int x = clickX;
+            final int y = clickY;
+
             Path path = new Path();
-            path.moveTo(clickX, clickY);
+
+            path.moveTo(x, y);
+            path.lineTo(
+                    x + MOVE_DISTANCE,
+                    y + MOVE_DISTANCE
+            );
 
             GestureDescription.StrokeDescription stroke =
                     new GestureDescription.StrokeDescription(
                             path,
-                            0,
+                            0L,
                             GESTURE_DURATION_MS
                     );
 
@@ -166,6 +186,7 @@ public class AutoClickService extends AccessibilityService {
             boolean accepted = dispatchGesture(
                     gesture,
                     new GestureResultCallback() {
+
                         @Override
                         public void onCompleted(
                                 GestureDescription description) {
@@ -173,9 +194,16 @@ public class AutoClickService extends AccessibilityService {
                             gesturePending = false;
 
                             completedClicks++;
+
                             updateClickRate();
                             playClickSound();
                             notifyStats();
+
+                            Log.d(
+                                    TAG,
+                                    "Gesto completado en "
+                                            + x + "," + y
+                            );
 
                             scheduleNext();
                         }
@@ -185,8 +213,13 @@ public class AutoClickService extends AccessibilityService {
                                 GestureDescription description) {
 
                             gesturePending = false;
+                            cancelledGestures++;
 
-                            Log.w(TAG, "Android canceló un gesto");
+                            Log.w(
+                                    TAG,
+                                    "Gesto cancelado. Total="
+                                            + cancelledGestures
+                            );
 
                             scheduleNext();
                         }
@@ -196,13 +229,19 @@ public class AutoClickService extends AccessibilityService {
 
             if (!accepted) {
                 gesturePending = false;
-                Log.w(TAG, "Android rechazó un gesto");
+
+                Log.e(
+                        TAG,
+                        "Android rechazó dispatchGesture"
+                );
+
                 scheduleNext();
             }
         }
     };
 
     private void updateClickRate() {
+
         long now = SystemClock.elapsedRealtime();
 
         if (rateWindowStart == 0L) {
@@ -214,6 +253,7 @@ public class AutoClickService extends AccessibilityService {
         long elapsed = now - rateWindowStart;
 
         if (elapsed >= 1000L) {
+
             clicksPerSecond = (int) Math.round(
                     clicksInWindow * 1000.0 / elapsed
             );
@@ -224,6 +264,7 @@ public class AutoClickService extends AccessibilityService {
     }
 
     private void playClickSound() {
+
         if (toneGenerator == null) {
             return;
         }
@@ -234,19 +275,23 @@ public class AutoClickService extends AccessibilityService {
                     30
             );
         } catch (RuntimeException e) {
-            Log.w(TAG, "No se pudo reproducir el sonido", e);
+            Log.w(TAG, "Error de sonido", e);
         }
     }
 
     private void scheduleNext() {
+
         if (clicking) {
-            handler.postDelayed(clickRunnable, interval);
+            handler.postDelayed(
+                    clickRunnable,
+                    interval
+            );
         }
     }
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
-        // No se necesitan eventos para programar los gestos.
+        // No se necesitan eventos.
     }
 
     @Override
@@ -256,6 +301,7 @@ public class AutoClickService extends AccessibilityService {
 
     @Override
     public void onDestroy() {
+
         stopClicks();
 
         statsListener = null;
