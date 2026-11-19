@@ -1,4 +1,3 @@
-
 package com.autoclicker.android;
 
 import android.app.Service;
@@ -9,6 +8,7 @@ import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.os.IBinder;
 import android.provider.Settings;
+import android.util.DisplayMetrics;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
@@ -50,13 +50,13 @@ public class FloatingPanelService extends Service {
     private static final int MIN_PANEL_HEIGHT = 180;
     private static final int MAX_CLICKS_PER_SECOND = 1500;
     private static final int MIN_INTERVAL_MS = 1;
+    private static final int DRAG_THRESHOLD_DP = 3;
 
     private final AutoClickService.StatsListener statsListener =
             (total, rate) -> {
                 if (totalClicksLabel != null) {
                     totalClicksLabel.setText("Clics: " + total);
                 }
-
                 if (actualSpeedLabel != null) {
                     actualSpeedLabel.setText(
                             "Velocidad actual: " + rate + "/seg"
@@ -79,14 +79,7 @@ public class FloatingPanelService extends Service {
         }
 
         wm = (WindowManager) getSystemService(WINDOW_SERVICE);
-
-        android.util.DisplayMetrics metrics =
-                new android.util.DisplayMetrics();
-
-        wm.getDefaultDisplay().getMetrics(metrics);
-
-        screenWidth = metrics.widthPixels;
-        screenHeight = metrics.heightPixels;
+        refreshScreenSize();
 
         int type = Build.VERSION.SDK_INT >= 26
                 ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
@@ -96,16 +89,32 @@ public class FloatingPanelService extends Service {
                 panelWidth,
                 panelHeight,
                 type,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                        | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
                 PixelFormat.TRANSLUCENT
         );
 
         panelParams.gravity = Gravity.TOP | Gravity.START;
-        panelParams.x = 20;
-        panelParams.y = 120;
+        panelParams.x = dp(20);
+        panelParams.y = dp(120);
 
         createPanel(type);
         createMarker(type);
+    }
+
+    /*
+     * Usa el tamaño físico completo de la pantalla, no solamente el área
+     * disponible para una aplicación normal. Se actualiza también durante
+     * el arrastre para adaptarse a cambios de orientación o tamaño.
+     */
+    private void refreshScreenSize() {
+        if (wm == null) return;
+
+        DisplayMetrics metrics = new DisplayMetrics();
+        wm.getDefaultDisplay().getRealMetrics(metrics);
+
+        screenWidth = metrics.widthPixels;
+        screenHeight = metrics.heightPixels;
     }
 
     private void createPanel(int type) {
@@ -124,12 +133,11 @@ public class FloatingPanelService extends Service {
         title.setTextColor(Color.BLACK);
         title.setTextSize(16);
         title.setPadding(dp(8), dp(8), dp(4), dp(8));
+        title.setContentDescription("Arrastrar panel");
 
         header.addView(title, new LinearLayout.LayoutParams(
                 0, -2, 1f
         ));
-
-        makeDraggable(title, panelParams, panel);
 
         Button minimize = new Button(this);
         minimize.setText("−");
@@ -139,13 +147,15 @@ public class FloatingPanelService extends Service {
         header.addView(minimize, new LinearLayout.LayoutParams(
                 dp(48), dp(44)
         ));
-
         minimize.setOnClickListener(v -> minimizePanel());
 
         panel.addView(header);
 
-        ScrollView scroll = new ScrollView(this);
+        // El encabezado completo sirve como zona de arrastre.
+        // El botón de minimizar conserva su propio clic.
+        makeDraggable(header, panelParams, panel);
 
+        ScrollView scroll = new ScrollView(this);
         content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
         scroll.addView(content);
@@ -163,7 +173,6 @@ public class FloatingPanelService extends Service {
         content.addView(actualSpeedLabel);
 
         AutoClickService existing = AutoClickService.getInstance();
-
         if (existing != null) {
             existing.setStatsListener(statsListener);
         }
@@ -175,7 +184,6 @@ public class FloatingPanelService extends Service {
         start.setText("▶");
         start.setTextSize(22);
         start.setContentDescription("Iniciar clics");
-
         clickButtons.addView(start, new LinearLayout.LayoutParams(
                 0, dp(48), 1f
         ));
@@ -184,13 +192,11 @@ public class FloatingPanelService extends Service {
         stop.setText("■");
         stop.setTextSize(22);
         stop.setContentDescription("Detener clics");
-
         clickButtons.addView(stop, new LinearLayout.LayoutParams(
                 0, dp(48), 1f
         ));
 
         content.addView(clickButtons);
-
         start.setOnClickListener(v -> startClicks());
         stop.setOnClickListener(v -> stopClicks());
 
@@ -198,7 +204,6 @@ public class FloatingPanelService extends Service {
         configuredSpeedLabel.setTextColor(Color.BLACK);
         configuredSpeedLabel.setTextSize(15);
         configuredSpeedLabel.setGravity(Gravity.CENTER);
-
         updateConfiguredSpeedLabel();
         content.addView(configuredSpeedLabel);
 
@@ -208,7 +213,6 @@ public class FloatingPanelService extends Service {
         Button slower = new Button(this);
         slower.setText("−");
         slower.setTextSize(24);
-
         speedButtons.addView(slower, new LinearLayout.LayoutParams(
                 0, dp(46), 1f
         ));
@@ -216,13 +220,11 @@ public class FloatingPanelService extends Service {
         Button faster = new Button(this);
         faster.setText("+");
         faster.setTextSize(24);
-
         speedButtons.addView(faster, new LinearLayout.LayoutParams(
                 0, dp(46), 1f
         ));
 
         content.addView(speedButtons);
-
         slower.setOnClickListener(v -> changeSpeed(-1));
         faster.setOnClickListener(v -> changeSpeed(1));
 
@@ -234,26 +236,23 @@ public class FloatingPanelService extends Service {
         SeekBar markerSizeSeek = new SeekBar(this);
         markerSizeSeek.setMax(100);
         markerSizeSeek.setProgress(markerSize - 20);
-
         markerSizeSeek.setOnSeekBarChangeListener(
                 new SeekBar.OnSeekBarChangeListener() {
                     @Override
                     public void onProgressChanged(
-                            SeekBar seekBar,
-                            int progress,
-                            boolean fromUser
+                            SeekBar seekBar, int progress, boolean fromUser
                     ) {
                         markerSize = progress + 20;
 
                         if (marker != null && markerParams != null) {
                             markerParams.width = dp(markerSize);
                             markerParams.height = dp(markerSize);
+                            keepMarkerInsideScreen();
 
                             try {
                                 wm.updateViewLayout(marker, markerParams);
                             } catch (IllegalArgumentException ignored) {
                             }
-
                             updateClickPosition();
                         }
                     }
@@ -267,27 +266,21 @@ public class FloatingPanelService extends Service {
                     }
                 }
         );
-
         content.addView(markerSizeSeek);
 
         Button startDetection = new Button(this);
         startDetection.setText("👁 Detectar");
         content.addView(startDetection);
-
         startDetection.setOnClickListener(v -> {
             Intent intent = new Intent(
-                    FloatingPanelService.this,
-                    MainActivity.class
+                    FloatingPanelService.this, MainActivity.class
             );
-
             intent.setAction(MainActivity.ACTION_START_DETECTION);
-
             intent.addFlags(
                     Intent.FLAG_ACTIVITY_NEW_TASK
                             | Intent.FLAG_ACTIVITY_CLEAR_TOP
                             | Intent.FLAG_ACTIVITY_SINGLE_TOP
             );
-
             try {
                 startActivity(intent);
             } catch (Exception e) {
@@ -302,28 +295,18 @@ public class FloatingPanelService extends Service {
         Button stopDetection = new Button(this);
         stopDetection.setText("■ Parar detección");
         content.addView(stopDetection);
-
         stopDetection.setOnClickListener(v -> {
-            Intent intent = new Intent(
-                    this,
-                    ScreenCaptureService.class
-            );
-
+            Intent intent = new Intent(this, ScreenCaptureService.class);
             intent.setAction(ScreenCaptureService.ACTION_STOP);
-
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     startForegroundService(intent);
                 } else {
                     startService(intent);
                 }
-
                 Toast.makeText(
-                        this,
-                        "Deteniendo captura",
-                        Toast.LENGTH_SHORT
+                        this, "Deteniendo captura", Toast.LENGTH_SHORT
                 ).show();
-
             } catch (Exception e) {
                 Toast.makeText(
                         this,
@@ -339,13 +322,10 @@ public class FloatingPanelService extends Service {
         content.addView(close);
 
         panel.addView(scroll, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                0,
-                1f
+                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
         ));
 
         FrameLayout resizeArea = new FrameLayout(this);
-
         TextView resizeHandle = new TextView(this);
         resizeHandle.setText("◢");
         resizeHandle.setTextColor(Color.DKGRAY);
@@ -354,19 +334,14 @@ public class FloatingPanelService extends Service {
 
         FrameLayout.LayoutParams handleParams =
                 new FrameLayout.LayoutParams(
-                        dp(44),
-                        dp(32),
-                        Gravity.RIGHT | Gravity.BOTTOM
+                        dp(44), dp(32), Gravity.RIGHT | Gravity.BOTTOM
                 );
-
         resizeArea.addView(resizeHandle, handleParams);
-
         panel.addView(resizeArea, new LinearLayout.LayoutParams(
                 -1, dp(32)
         ));
 
         makeResizable(resizeHandle);
-
         wm.addView(panel, panelParams);
     }
 
@@ -380,10 +355,7 @@ public class FloatingPanelService extends Service {
                     Toast.LENGTH_LONG
             ).show();
 
-            Intent intent = new Intent(
-                    Settings.ACTION_ACCESSIBILITY_SETTINGS
-            );
-
+            Intent intent = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             startActivity(intent);
             return;
@@ -391,39 +363,28 @@ public class FloatingPanelService extends Service {
 
         updateClickPosition();
         service.setStatsListener(statsListener);
-
         service.setInterval(Math.max(
-                MIN_INTERVAL_MS,
-                1000L / clicksPerSecond
+                MIN_INTERVAL_MS, 1000L / clicksPerSecond
         ));
-
         service.startClicks();
 
         Toast.makeText(
-                this,
-                "Clics iniciados",
-                Toast.LENGTH_SHORT
+                this, "Clics iniciados", Toast.LENGTH_SHORT
         ).show();
     }
 
     private void stopClicks() {
         AutoClickService service = AutoClickService.getInstance();
-
         if (service != null) {
             service.stopClicks();
         }
-
         Toast.makeText(
-                this,
-                "Clics detenidos",
-                Toast.LENGTH_SHORT
+                this, "Clics detenidos", Toast.LENGTH_SHORT
         ).show();
     }
 
     private void minimizePanel() {
-        if (minimized || panel == null) {
-            return;
-        }
+        if (minimized || panel == null) return;
 
         try {
             wm.removeView(panel);
@@ -448,62 +409,62 @@ public class FloatingPanelService extends Service {
         background.setColor(Color.argb(225, 25, 35, 55));
         background.setCornerRadius(dp(30));
         background.setStroke(dp(2), Color.rgb(40, 130, 255));
-
         miniBubble.setBackground(background);
+
+        // Agarre independiente: permite arrastrar sin bloquear los botones.
+        TextView dragHandle = new TextView(this);
+        dragHandle.setText("☰");
+        dragHandle.setTextSize(20);
+        dragHandle.setTextColor(Color.WHITE);
+        dragHandle.setGravity(Gravity.CENTER);
+        dragHandle.setContentDescription("Arrastrar panel minimizado");
+        miniBubble.addView(dragHandle, new LinearLayout.LayoutParams(
+                dp(38), dp(48)
+        ));
 
         Button play = new Button(this);
         play.setText("▶");
         play.setTextSize(16);
         play.setContentDescription("Iniciar clics");
-
         miniBubble.addView(play, new LinearLayout.LayoutParams(
                 dp(48), dp(48)
         ));
-
         play.setOnClickListener(v -> startClicks());
 
         Button stop = new Button(this);
         stop.setText("■");
         stop.setTextSize(16);
         stop.setContentDescription("Detener clics");
-
         miniBubble.addView(stop, new LinearLayout.LayoutParams(
                 dp(48), dp(48)
         ));
-
         stop.setOnClickListener(v -> stopClicks());
 
         Button expand = new Button(this);
         expand.setText("↗");
         expand.setTextSize(18);
         expand.setContentDescription("Expandir panel");
-
         miniBubble.addView(expand, new LinearLayout.LayoutParams(
                 dp(44), dp(48)
         ));
-
         expand.setOnClickListener(v -> expandPanel());
 
         miniParams = new WindowManager.LayoutParams(
-                -2,
-                -2,
-                type,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                -2, -2, type,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                        | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
                 PixelFormat.TRANSLUCENT
         );
-
         miniParams.gravity = Gravity.TOP | Gravity.START;
-        miniParams.x = Math.max(0, screenWidth - dp(160));
+        miniParams.x = Math.max(0, screenWidth - dp(230));
         miniParams.y = dp(120);
 
         wm.addView(miniBubble, miniParams);
-        makeMiniDraggable();
+        makeMiniDraggable(dragHandle);
     }
 
     private void expandPanel() {
-        if (!minimized || panel == null) {
-            return;
-        }
+        if (!minimized || panel == null) return;
 
         try {
             if (miniBubble != null) {
@@ -513,67 +474,54 @@ public class FloatingPanelService extends Service {
         }
 
         miniBubble = null;
+        refreshScreenSize();
+        keepPanelInsideScreen();
         wm.addView(panel, panelParams);
         minimized = false;
     }
 
-    private void makeMiniDraggable() {
-        miniBubble.setOnTouchListener(new View.OnTouchListener() {
+    private void makeMiniDraggable(View dragHandle) {
+        dragHandle.setOnTouchListener(new View.OnTouchListener() {
             private float startX;
             private float startY;
             private int originalX;
             private int originalY;
-            private boolean moved;
 
             @Override
             public boolean onTouch(View view, MotionEvent event) {
                 switch (event.getAction()) {
                     case MotionEvent.ACTION_DOWN:
+                        refreshScreenSize();
                         startX = event.getRawX();
                         startY = event.getRawY();
                         originalX = miniParams.x;
                         originalY = miniParams.y;
-                        moved = false;
                         return true;
 
                     case MotionEvent.ACTION_MOVE:
-                        int dx = (int) (event.getRawX() - startX);
-                        int dy = (int) (event.getRawY() - startY);
-
-                        if (Math.abs(dx) > dp(5)
-                                || Math.abs(dy) > dp(5)) {
-                            moved = true;
-                        }
+                        refreshScreenSize();
+                        int dx = Math.round(event.getRawX() - startX);
+                        int dy = Math.round(event.getRawY() - startY);
 
                         miniParams.x = clamp(
                                 originalX + dx,
                                 0,
-                                Math.max(
-                                        0,
-                                        screenWidth - miniBubble.getWidth()
-                                )
+                                Math.max(0, screenWidth - miniBubble.getWidth())
                         );
-
                         miniParams.y = clamp(
                                 originalY + dy,
                                 0,
-                                Math.max(
-                                        0,
-                                        screenHeight - miniBubble.getHeight()
-                                )
+                                Math.max(0, screenHeight - miniBubble.getHeight())
                         );
 
                         try {
                             wm.updateViewLayout(miniBubble, miniParams);
                         } catch (IllegalArgumentException ignored) {
                         }
-
                         return true;
 
                     case MotionEvent.ACTION_UP:
-                        if (!moved) {
-                            expandPanel();
-                        }
+                    case MotionEvent.ACTION_CANCEL:
                         return true;
 
                     default:
@@ -589,15 +537,12 @@ public class FloatingPanelService extends Service {
                 1,
                 MAX_CLICKS_PER_SECOND
         );
-
         updateConfiguredSpeedLabel();
 
         AutoClickService service = AutoClickService.getInstance();
-
         if (service != null) {
             service.setInterval(Math.max(
-                    MIN_INTERVAL_MS,
-                    1000L / clicksPerSecond
+                    MIN_INTERVAL_MS, 1000L / clicksPerSecond
             ));
         }
     }
@@ -629,6 +574,7 @@ public class FloatingPanelService extends Service {
             public boolean onTouch(View view, MotionEvent event) {
                 switch (event.getAction()) {
                     case MotionEvent.ACTION_DOWN:
+                        refreshScreenSize();
                         startX = event.getRawX();
                         startY = event.getRawY();
                         originalWidth = panelWidth;
@@ -636,29 +582,33 @@ public class FloatingPanelService extends Service {
                         return true;
 
                     case MotionEvent.ACTION_MOVE:
-                        int dx = (int) (event.getRawX() - startX);
-                        int dy = (int) (event.getRawY() - startY);
+                        refreshScreenSize();
+                        int dx = Math.round(event.getRawX() - startX);
+                        int dy = Math.round(event.getRawY() - startY);
 
                         panelWidth = clamp(
                                 originalWidth + dx,
                                 dp(MIN_PANEL_WIDTH),
-                                screenWidth
+                                Math.max(dp(MIN_PANEL_WIDTH), screenWidth)
                         );
-
                         panelHeight = clamp(
                                 originalHeight + dy,
                                 dp(MIN_PANEL_HEIGHT),
-                                screenHeight
+                                Math.max(dp(MIN_PANEL_HEIGHT), screenHeight)
                         );
 
                         panelParams.width = panelWidth;
                         panelParams.height = panelHeight;
+                        keepPanelInsideScreen();
 
                         try {
                             wm.updateViewLayout(panel, panelParams);
                         } catch (IllegalArgumentException ignored) {
                         }
+                        return true;
 
+                    case MotionEvent.ACTION_UP:
+                    case MotionEvent.ACTION_CANCEL:
                         return true;
 
                     default:
@@ -676,7 +626,6 @@ public class FloatingPanelService extends Service {
         background.setColor(Color.TRANSPARENT);
         background.setShape(GradientDrawable.OVAL);
         background.setStroke(dp(4), Color.YELLOW);
-
         marker.setBackground(background);
 
         markerParams = new WindowManager.LayoutParams(
@@ -684,30 +633,62 @@ public class FloatingPanelService extends Service {
                 dp(markerSize),
                 type,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                        | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+                        | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+                        | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
                 PixelFormat.TRANSLUCENT
         );
 
         markerParams.gravity = Gravity.TOP | Gravity.START;
-        markerParams.x = 300;
-        markerParams.y = 500;
+        markerParams.x = dp(300);
+        markerParams.y = dp(500);
+
+        refreshScreenSize();
+        keepMarkerInsideScreen();
 
         wm.addView(marker, markerParams);
-
         makeDraggable(marker, markerParams, marker);
         updateClickPosition();
     }
 
+    private void keepMarkerInsideScreen() {
+        refreshScreenSize();
+        if (markerParams == null) return;
+
+        markerParams.x = clamp(
+                markerParams.x,
+                0,
+                Math.max(0, screenWidth - markerParams.width)
+        );
+        markerParams.y = clamp(
+                markerParams.y,
+                0,
+                Math.max(0, screenHeight - markerParams.height)
+        );
+    }
+
+    private void keepPanelInsideScreen() {
+        refreshScreenSize();
+        if (panelParams == null) return;
+
+        panelParams.x = clamp(
+                panelParams.x,
+                0,
+                Math.max(0, screenWidth - panelParams.width)
+        );
+        panelParams.y = clamp(
+                panelParams.y,
+                0,
+                Math.max(0, screenHeight - panelParams.height)
+        );
+    }
+
     private void updateClickPosition() {
-        if (marker == null || markerParams == null) {
-            return;
-        }
+        if (marker == null || markerParams == null) return;
 
         int x = markerParams.x + markerParams.width / 2;
         int y = markerParams.y + markerParams.height / 2;
 
         AutoClickService service = AutoClickService.getInstance();
-
         if (service != null) {
             service.setPosition(x, y);
         }
@@ -728,6 +709,7 @@ public class FloatingPanelService extends Service {
             public boolean onTouch(View v, MotionEvent event) {
                 switch (event.getAction()) {
                     case MotionEvent.ACTION_DOWN:
+                        refreshScreenSize();
                         startX = event.getRawX();
                         startY = event.getRawY();
                         originalX = params.x;
@@ -735,20 +717,26 @@ public class FloatingPanelService extends Service {
                         return true;
 
                     case MotionEvent.ACTION_MOVE:
-                        int dx = (int) (event.getRawX() - startX);
-                        int dy = (int) (event.getRawY() - startY);
+                        refreshScreenSize();
+                        int dx = Math.round(event.getRawX() - startX);
+                        int dy = Math.round(event.getRawY() - startY);
 
-                        params.x = clamp(
-                                originalX + dx,
-                                0,
-                                Math.max(0, screenWidth - view.getWidth())
-                        );
+                        params.x = originalX + dx;
+                        params.y = originalY + dy;
 
-                        params.y = clamp(
-                                originalY + dy,
-                                0,
-                                Math.max(0, screenHeight - view.getHeight())
-                        );
+                        int maxX;
+                        int maxY;
+
+                        if (view == marker) {
+                            maxX = Math.max(0, screenWidth - params.width);
+                            maxY = Math.max(0, screenHeight - params.height);
+                        } else {
+                            maxX = Math.max(0, screenWidth - panelWidth);
+                            maxY = Math.max(0, screenHeight - panelHeight);
+                        }
+
+                        params.x = clamp(params.x, 0, maxX);
+                        params.y = clamp(params.y, 0, maxY);
 
                         try {
                             wm.updateViewLayout(view, params);
@@ -759,10 +747,10 @@ public class FloatingPanelService extends Service {
                         if (view == marker) {
                             updateClickPosition();
                         }
-
                         return true;
 
                     case MotionEvent.ACTION_UP:
+                    case MotionEvent.ACTION_CANCEL:
                         return true;
 
                     default:
@@ -779,10 +767,7 @@ public class FloatingPanelService extends Service {
     }
 
     private int clamp(int value, int min, int max) {
-        if (max < min) {
-            max = min;
-        }
-
+        if (max < min) max = min;
         return Math.max(min, Math.min(value, max));
     }
 
@@ -794,7 +779,6 @@ public class FloatingPanelService extends Service {
     @Override
     public void onDestroy() {
         AutoClickService service = AutoClickService.getInstance();
-
         if (service != null) {
             service.setStatsListener(null);
         }
@@ -813,9 +797,7 @@ public class FloatingPanelService extends Service {
     }
 
     private void removeViewSafely(View view) {
-        if (view == null || wm == null) {
-            return;
-        }
+        if (view == null || wm == null) return;
 
         try {
             wm.removeView(view);
