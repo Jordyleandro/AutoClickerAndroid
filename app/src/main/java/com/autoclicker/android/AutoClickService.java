@@ -15,7 +15,9 @@ import android.widget.Toast;
 public class AutoClickService extends AccessibilityService {
 
     private static final String TAG = "AutoClicker";
-    private static final long GESTURE_DURATION_MS = 10L;
+
+    // Duración del toque: antes era 10 ms.
+    private static final long GESTURE_DURATION_MS = 60L;
 
     private static AutoClickService instance;
 
@@ -167,6 +169,7 @@ public class AutoClickService extends AccessibilityService {
                         @Override
                         public void onCompleted(
                                 GestureDescription description) {
+
                             gesturePending = false;
 
                             completedClicks++;
@@ -180,8 +183,11 @@ public class AutoClickService extends AccessibilityService {
                         @Override
                         public void onCancelled(
                                 GestureDescription description) {
+
                             gesturePending = false;
+
                             Log.w(TAG, "Android canceló un gesto");
+
                             scheduleNext();
                         }
                     },
