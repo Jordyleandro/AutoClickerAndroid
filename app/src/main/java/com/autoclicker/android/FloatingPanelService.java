@@ -368,6 +368,9 @@ public class FloatingPanelService extends Service {
         ));
         service.startClicks();
 
+        // Mientras hace clics, el anillo deja pasar los toques.
+        setMarkerTouchable(false);
+
         Toast.makeText(
                 this, "Clics iniciados", Toast.LENGTH_SHORT
         ).show();
@@ -378,9 +381,32 @@ public class FloatingPanelService extends Service {
         if (service != null) {
             service.stopClicks();
         }
+
+        // Al detener, el anillo vuelve a poder moverse.
+        setMarkerTouchable(true);
+
         Toast.makeText(
                 this, "Clics detenidos", Toast.LENGTH_SHORT
         ).show();
+    }
+
+    private void setMarkerTouchable(boolean touchable) {
+        if (marker == null || markerParams == null || wm == null) return;
+
+        int flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+                | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN;
+
+        if (!touchable) {
+            flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+        }
+
+        markerParams.flags = flags;
+
+        try {
+            wm.updateViewLayout(marker, markerParams);
+        } catch (IllegalArgumentException ignored) {
+        }
     }
 
     private void minimizePanel() {
