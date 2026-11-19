@@ -16,7 +16,7 @@ public class AutoClickService extends AccessibilityService {
 
     private static final String TAG = "AutoClicker";
 
-    private static final long GESTURE_DURATION_MS = 60L;
+    private static final long GESTURE_DURATION_MS = 10L;
 
     private static AutoClickService instance;
 
