@@ -102,11 +102,6 @@ public class FloatingPanelService extends Service {
         createMarker(type);
     }
 
-    /*
-     * Usa el tamaño físico completo de la pantalla, no solamente el área
-     * disponible para una aplicación normal. Se actualiza también durante
-     * el arrastre para adaptarse a cambios de orientación o tamaño.
-     */
     private void refreshScreenSize() {
         if (wm == null) return;
 
@@ -151,8 +146,6 @@ public class FloatingPanelService extends Service {
 
         panel.addView(header);
 
-        // El encabezado completo sirve como zona de arrastre.
-        // El botón de minimizar conserva su propio clic.
         makeDraggable(header, panelParams, panel);
 
         ScrollView scroll = new ScrollView(this);
@@ -268,54 +261,6 @@ public class FloatingPanelService extends Service {
         );
         content.addView(markerSizeSeek);
 
-        Button startDetection = new Button(this);
-        startDetection.setText("👁 Detectar");
-        content.addView(startDetection);
-        startDetection.setOnClickListener(v -> {
-            Intent intent = new Intent(
-                    FloatingPanelService.this, MainActivity.class
-            );
-            intent.setAction(MainActivity.ACTION_START_DETECTION);
-            intent.addFlags(
-                    Intent.FLAG_ACTIVITY_NEW_TASK
-                            | Intent.FLAG_ACTIVITY_CLEAR_TOP
-                            | Intent.FLAG_ACTIVITY_SINGLE_TOP
-            );
-            try {
-                startActivity(intent);
-            } catch (Exception e) {
-                Toast.makeText(
-                        this,
-                        "No se pudo abrir la autorización de captura",
-                        Toast.LENGTH_LONG
-                ).show();
-            }
-        });
-
-        Button stopDetection = new Button(this);
-        stopDetection.setText("■ Parar detección");
-        content.addView(stopDetection);
-        stopDetection.setOnClickListener(v -> {
-            Intent intent = new Intent(this, ScreenCaptureService.class);
-            intent.setAction(ScreenCaptureService.ACTION_STOP);
-            try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    startForegroundService(intent);
-                } else {
-                    startService(intent);
-                }
-                Toast.makeText(
-                        this, "Deteniendo captura", Toast.LENGTH_SHORT
-                ).show();
-            } catch (Exception e) {
-                Toast.makeText(
-                        this,
-                        "No se pudo detener la captura",
-                        Toast.LENGTH_LONG
-                ).show();
-            }
-        });
-
         Button close = new Button(this);
         close.setText("✕ Cerrar panel");
         close.setOnClickListener(v -> stopSelf());
@@ -368,7 +313,6 @@ public class FloatingPanelService extends Service {
         ));
         service.startClicks();
 
-        // Mientras hace clics, el anillo deja pasar los toques.
         setMarkerTouchable(false);
 
         Toast.makeText(
@@ -382,7 +326,6 @@ public class FloatingPanelService extends Service {
             service.stopClicks();
         }
 
-        // Al detener, el anillo vuelve a poder moverse.
         setMarkerTouchable(true);
 
         Toast.makeText(
@@ -437,7 +380,6 @@ public class FloatingPanelService extends Service {
         background.setStroke(dp(2), Color.rgb(40, 130, 255));
         miniBubble.setBackground(background);
 
-        // Agarre independiente: permite arrastrar sin bloquear los botones.
         TextView dragHandle = new TextView(this);
         dragHandle.setText("☰");
         dragHandle.setTextSize(20);
