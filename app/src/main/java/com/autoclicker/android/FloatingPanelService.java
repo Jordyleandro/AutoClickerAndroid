@@ -215,7 +215,7 @@ public class FloatingPanelService extends Service {
 
         LinearLayout clickCountRow = new LinearLayout(this);
         clickCountRow.setOrientation(LinearLayout.HORIZONTAL);
-        clickCountButtons = new Button[5];
+        clickCountButtons = new Button[3];
 
         for (int i = 0; i < clickCountButtons.length; i++) {
             final int count = i + 1;
@@ -547,7 +547,7 @@ public class FloatingPanelService extends Service {
     }
 
     private void setClicksPerPoint(int count) {
-        clicksPerPoint = clamp(count, 1, 5);
+        clicksPerPoint = clamp(count, 1, 3);
         updateClickCountButtons();
 
         AutoClickService service = AutoClickService.getInstance();
