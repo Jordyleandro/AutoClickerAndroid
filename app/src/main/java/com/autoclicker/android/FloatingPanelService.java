@@ -500,7 +500,7 @@ public class FloatingPanelService extends Service {
     }
 
     private void showSpeedOptions() {
-        new AlertDialog.Builder(this)
+        AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("Ajustar velocidad")
                 .setItems(
                         new String[]{
@@ -516,7 +516,8 @@ public class FloatingPanelService extends Service {
                         }
                 )
                 .setNegativeButton("Cancelar", null)
-                .show();
+                .create();
+        showOverlayDialog(dialog);
     }
 
     private void showNumericSpeedDialog() {
@@ -556,7 +557,7 @@ public class FloatingPanelService extends Service {
                             }
                         })
         );
-        dialog.show();
+        showOverlayDialog(dialog);
     }
 
     private void showSliderSpeedDialog() {
@@ -595,13 +596,28 @@ public class FloatingPanelService extends Service {
                 }
         );
 
-        new AlertDialog.Builder(this)
+        AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("Desliza para ajustar")
                 .setView(layout)
                 .setPositiveButton("Aplicar", (dialog, which) ->
                         setSpeed(speedSeek.getProgress() + 1))
                 .setNegativeButton("Cancelar", null)
-                .show();
+                .create();
+        showOverlayDialog(dialog);
+    }
+
+    private void showOverlayDialog(AlertDialog dialog) {
+        int type = Build.VERSION.SDK_INT >= 26
+                ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                : WindowManager.LayoutParams.TYPE_PHONE;
+
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setType(type);
+            dialog.getWindow().setSoftInputMode(
+                    WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN
+            );
+        }
+        dialog.show();
     }
 
     private void setSpeed(int speed) {
