@@ -27,6 +27,7 @@ public class AutoClickService extends AccessibilityService {
     private int clickY = 500;
 
     private long interval = 1L;
+    private int clicksPerTouch = 1;
 
     private boolean clicking = false;
     private boolean gesturePending = false;
@@ -110,6 +111,10 @@ public class AutoClickService extends AccessibilityService {
         interval = Math.max(1L, milliseconds);
     }
 
+    public void setClicksPerTouch(int count) {
+        clicksPerTouch = Math.max(1, Math.min(3, count));
+    }
+
     public void startClicks() {
         if (instance != this || clicking) {
             return;
@@ -145,20 +150,24 @@ public class AutoClickService extends AccessibilityService {
                 return;
             }
 
-            Path path = new Path();
-            path.moveTo(clickX, clickY);
+            GestureDescription.Builder gestureBuilder =
+                    new GestureDescription.Builder();
 
-            GestureDescription.StrokeDescription stroke =
-                    new GestureDescription.StrokeDescription(
-                            path,
-                            0,
-                            GESTURE_DURATION_MS
-                    );
+            // Envía de 1 a 3 toques simultáneos en la misma coordenada.
+            for (int i = 0; i < clicksPerTouch; i++) {
+                Path path = new Path();
+                path.moveTo(clickX, clickY);
 
-            GestureDescription gesture =
-                    new GestureDescription.Builder()
-                            .addStroke(stroke)
-                            .build();
+                GestureDescription.StrokeDescription stroke =
+                        new GestureDescription.StrokeDescription(
+                                path,
+                                0,
+                                GESTURE_DURATION_MS
+                        );
+                gestureBuilder.addStroke(stroke);
+            }
+
+            GestureDescription gesture = gestureBuilder.build();
 
             gesturePending = true;
 
@@ -171,7 +180,7 @@ public class AutoClickService extends AccessibilityService {
 
                             gesturePending = false;
 
-                            completedClicks++;
+                            completedClicks += clicksPerTouch;
                             updateClickRate();
                             playClickSound();
                             notifyStats();
