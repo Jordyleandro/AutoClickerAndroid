@@ -25,6 +25,8 @@ public class AutoClickService extends AccessibilityService {
     private int clickY = 500;
 
     private long interval = 1L;
+    private int clicksPerPoint = 1;
+    private int clicksRemainingInBurst = 0;
 
     private boolean clicking = false;
     private boolean gesturePending = false;
@@ -97,6 +99,13 @@ public class AutoClickService extends AccessibilityService {
         interval = Math.max(1L, milliseconds);
     }
 
+    public void setClicksPerPoint(int count) {
+        clicksPerPoint = Math.max(1, Math.min(5, count));
+        if (!clicking) {
+            clicksRemainingInBurst = 0;
+        }
+    }
+
     public void startClicks() {
         if (instance != this || clicking) {
             return;
@@ -106,6 +115,7 @@ public class AutoClickService extends AccessibilityService {
 
         clicking = true;
         gesturePending = false;
+        clicksRemainingInBurst = 0;
 
         Log.i(
                 TAG,
@@ -120,6 +130,7 @@ public class AutoClickService extends AccessibilityService {
 
     public void stopClicks() {
         clicking = false;
+        clicksRemainingInBurst = 0;
         handler.removeCallbacks(clickRunnable);
 
         Log.i(TAG, "Clics detenidos");
@@ -130,6 +141,10 @@ public class AutoClickService extends AccessibilityService {
         public void run() {
             if (!clicking || gesturePending) {
                 return;
+            }
+
+            if (clicksRemainingInBurst <= 0) {
+                clicksRemainingInBurst = clicksPerPoint;
             }
 
             Path path = new Path();
@@ -162,7 +177,13 @@ public class AutoClickService extends AccessibilityService {
                             updateClickRate();
                             notifyStats();
 
-                            scheduleNext();
+                            clicksRemainingInBurst--;
+                            if (clicking && clicksRemainingInBurst > 0) {
+                                handler.postDelayed(clickRunnable, interval);
+                            } else {
+                                clicksRemainingInBurst = 0;
+                                scheduleNext();
+                            }
                         }
 
                         @Override
@@ -170,6 +191,7 @@ public class AutoClickService extends AccessibilityService {
                                 GestureDescription description) {
 
                             gesturePending = false;
+                            clicksRemainingInBurst = 0;
 
                             Log.w(TAG, "Android canceló un gesto");
 
@@ -181,6 +203,7 @@ public class AutoClickService extends AccessibilityService {
 
             if (!accepted) {
                 gesturePending = false;
+                clicksRemainingInBurst = 0;
                 Log.w(TAG, "Android rechazó un gesto");
                 scheduleNext();
             }
