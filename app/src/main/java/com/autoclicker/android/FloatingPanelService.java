@@ -28,6 +28,8 @@ import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.SeekBar;
+import android.widget.Spinner;
+import android.widget.ArrayAdapter;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -49,6 +51,7 @@ public class FloatingPanelService extends Service {
 
     private int markerSize = 48;
     private int clicksPerSecond = 10;
+    private int clicksPerTouch = 1;
     private int panelWidth = 300;
     private int panelHeight = 440;
     private int screenWidth;
@@ -204,6 +207,47 @@ public class FloatingPanelService extends Service {
         start.setOnClickListener(v -> startClicks());
         stop.setOnClickListener(v -> stopClicks());
 
+        TextView clicksPerTouchLabel = new TextView(this);
+        clicksPerTouchLabel.setTextColor(Color.BLACK);
+        clicksPerTouchLabel.setText("Clics por toque");
+        content.addView(clicksPerTouchLabel);
+
+        Spinner clicksPerTouchSpinner = new Spinner(this);
+        ArrayAdapter<String> tapAdapter = new ArrayAdapter<>(
+                this,
+                android.R.layout.simple_spinner_item,
+                new String[]{"1 clic", "2 clics", "3 clics"}
+        );
+        tapAdapter.setDropDownViewResource(
+                android.R.layout.simple_spinner_dropdown_item
+        );
+        clicksPerTouchSpinner.setAdapter(tapAdapter);
+        clicksPerTouchSpinner.setSelection(clicksPerTouch - 1);
+        clicksPerTouchSpinner.setOnItemSelectedListener(
+                new android.widget.AdapterView.OnItemSelectedListener() {
+                    @Override
+                    public void onItemSelected(
+                            android.widget.AdapterView<?> parent,
+                            View view,
+                            int position,
+                            long id
+                    ) {
+                        clicksPerTouch = position + 1;
+                        AutoClickService service = AutoClickService.getInstance();
+                        if (service != null) {
+                            service.setClicksPerTouch(clicksPerTouch);
+                        }
+                    }
+
+                    @Override
+                    public void onNothingSelected(
+                            android.widget.AdapterView<?> parent
+                    ) {
+                    }
+                }
+        );
+        content.addView(clicksPerTouchSpinner);
+
         configuredSpeedLabel = new TextView(this);
         configuredSpeedLabel.setTextColor(Color.BLACK);
         configuredSpeedLabel.setTextSize(15);
@@ -326,6 +370,7 @@ public class FloatingPanelService extends Service {
 
         updateClickPosition();
         service.setStatsListener(statsListener);
+        service.setClicksPerTouch(clicksPerTouch);
         service.setInterval(Math.max(
                 MIN_INTERVAL_MS, 1000L / clicksPerSecond
         ));
