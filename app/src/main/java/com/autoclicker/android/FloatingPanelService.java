@@ -42,6 +42,8 @@ public class FloatingPanelService extends Service {
     private TextView totalClicksLabel;
     private TextView actualSpeedLabel;
     private TextView configuredSpeedLabel;
+    private TextView clickCountLabel;
+    private Button[] clickCountButtons;
 
     private WindowManager.LayoutParams panelParams;
     private WindowManager.LayoutParams markerParams;
@@ -49,6 +51,7 @@ public class FloatingPanelService extends Service {
 
     private int markerSize = 48;
     private int clicksPerSecond = 10;
+    private int clicksPerPoint = 1;
     private int panelWidth = 300;
     private int panelHeight = 440;
     private int screenWidth;
@@ -204,6 +207,31 @@ public class FloatingPanelService extends Service {
         start.setOnClickListener(v -> startClicks());
         stop.setOnClickListener(v -> stopClicks());
 
+        clickCountLabel = new TextView(this);
+        clickCountLabel.setTextColor(Color.BLACK);
+        clickCountLabel.setTextSize(15);
+        clickCountLabel.setGravity(Gravity.CENTER);
+        content.addView(clickCountLabel);
+
+        LinearLayout clickCountRow = new LinearLayout(this);
+        clickCountRow.setOrientation(LinearLayout.HORIZONTAL);
+        clickCountButtons = new Button[5];
+
+        for (int i = 0; i < clickCountButtons.length; i++) {
+            final int count = i + 1;
+            Button option = new Button(this);
+            option.setTextSize(13);
+            option.setPadding(dp(2), 0, dp(2), 0);
+            clickCountButtons[i] = option;
+            clickCountRow.addView(option, new LinearLayout.LayoutParams(
+                    0, dp(44), 1f
+            ));
+            option.setOnClickListener(v -> setClicksPerPoint(count));
+        }
+
+        content.addView(clickCountRow);
+        updateClickCountButtons();
+
         configuredSpeedLabel = new TextView(this);
         configuredSpeedLabel.setTextColor(Color.BLACK);
         configuredSpeedLabel.setTextSize(15);
@@ -326,6 +354,7 @@ public class FloatingPanelService extends Service {
 
         updateClickPosition();
         service.setStatsListener(statsListener);
+        service.setClicksPerPoint(clicksPerPoint);
         service.setInterval(Math.max(
                 MIN_INTERVAL_MS, 1000L / clicksPerSecond
         ));
@@ -515,6 +544,31 @@ public class FloatingPanelService extends Service {
                 }
             }
         });
+    }
+
+    private void setClicksPerPoint(int count) {
+        clicksPerPoint = clamp(count, 1, 5);
+        updateClickCountButtons();
+
+        AutoClickService service = AutoClickService.getInstance();
+        if (service != null) {
+            service.setClicksPerPoint(clicksPerPoint);
+        }
+    }
+
+    private void updateClickCountButtons() {
+        if (clickCountLabel != null) {
+            clickCountLabel.setText("Clics por punto: " + clicksPerPoint);
+        }
+
+        if (clickCountButtons == null) return;
+
+        for (int i = 0; i < clickCountButtons.length; i++) {
+            Button option = clickCountButtons[i];
+            boolean selected = (i + 1) == clicksPerPoint;
+            option.setText(selected ? "✓ " + (i + 1) : String.valueOf(i + 1));
+            option.setTextColor(selected ? Color.rgb(0, 110, 50) : Color.BLACK);
+        }
     }
 
     private void setSpeed(int speed) {
