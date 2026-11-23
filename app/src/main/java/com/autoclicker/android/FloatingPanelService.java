@@ -4,6 +4,16 @@ import android.app.AlertDialog;
 import android.app.Service;
 import android.content.Intent;
 import android.graphics.Color;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.Drawable;
+import android.graphics.drawable.LayerDrawable;
+import android.os.Handler;
+import android.os.Looper;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import android.graphics.PixelFormat;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
@@ -631,11 +641,84 @@ public class FloatingPanelService extends Service {
     }
 
     private GradientDrawable createPanelBackground() {
-        GradientDrawable background = new GradientDrawable();
-        background.setColor(Color.WHITE);
-        background.setCornerRadius(dp(8));
-        background.setStroke(dp(2), Color.LTGRAY);
-        return background;
+        GradientDrawable fallback = new GradientDrawable();
+        fallback.setColor(Color.rgb(24, 43, 54));
+        fallback.setCornerRadius(dp(8));
+        fallback.setStroke(dp(2), Color.rgb(40, 130, 160));
+        loadRingBackgroundImage();
+        return fallback;
+    }
+
+    private void loadRingBackgroundImage() {
+        new Thread(() -> {
+            Bitmap downloaded;
+            HttpURLConnection connection = null;
+            try {
+                URL imageUrl = new URL(
+                        "https://static.boombang.tv/resources/uploads/"
+                                + "ring-playero-ropero-vip-20260923-v2.png"
+                );
+                connection = (HttpURLConnection) imageUrl.openConnection();
+                connection.setConnectTimeout(10000);
+                connection.setReadTimeout(15000);
+                connection.setRequestMethod("GET");
+                connection.setDoInput(true);
+                connection.connect();
+
+                try (java.io.InputStream stream = connection.getInputStream()) {
+                    downloaded = BitmapFactory.decodeStream(stream);
+                }
+            } catch (Exception ignored) {
+                return;
+            } finally {
+                if (connection != null) {
+                    connection.disconnect();
+                }
+            }
+
+            if (downloaded == null) return;
+
+            Bitmap image = downloaded;
+            new Handler(Looper.getMainLooper()).post(() -> {
+                if (panel == null) return;
+
+                int targetWidth = Math.max(1, panelWidth);
+                int targetHeight = Math.max(1, panelHeight);
+                float targetRatio = targetWidth / (float) targetHeight;
+                float imageRatio = image.getWidth() / (float) image.getHeight();
+
+                Bitmap cropped = image;
+                if (imageRatio > targetRatio) {
+                    int cropWidth = Math.max(
+                            1, Math.min(image.getWidth(),
+                                    Math.round(image.getHeight() * targetRatio))
+                    );
+                    int left = (image.getWidth() - cropWidth) / 2;
+                    cropped = Bitmap.createBitmap(
+                            image, left, 0, cropWidth, image.getHeight()
+                    );
+                } else if (imageRatio < targetRatio) {
+                    int cropHeight = Math.max(
+                            1, Math.min(image.getHeight(),
+                                    Math.round(image.getWidth() / targetRatio))
+                    );
+                    int top = (image.getHeight() - cropHeight) / 2;
+                    cropped = Bitmap.createBitmap(
+                            image, 0, top, image.getWidth(), cropHeight
+                    );
+                }
+
+                BitmapDrawable photo = new BitmapDrawable(getResources(), cropped);
+                photo.setGravity(Gravity.FILL);
+                ColorDrawable softOverlay = new ColorDrawable(
+                        Color.argb(78, 255, 255, 255)
+                );
+                LayerDrawable layers = new LayerDrawable(
+                        new Drawable[]{photo, softOverlay}
+                );
+                panel.setBackground(layers);
+            });
+        }).start();
     }
 
     private void makeResizable(View handle) {
