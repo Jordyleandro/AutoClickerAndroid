@@ -1,4 +1,5 @@
 name: AutoClickerNuevo APK
+# Rebuild with the reduced safe speed cap
 
 on:
   workflow_dispatch:
