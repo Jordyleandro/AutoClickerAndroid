@@ -79,7 +79,7 @@ public class AutoClickService extends AccessibilityService {
     }
 
     public void setInterval(long milliseconds) {
-        interval = Math.max(50L, milliseconds);
+        interval = Math.max(1L, milliseconds);
     }
 
     public void setClicksPerTouch(int count) {
