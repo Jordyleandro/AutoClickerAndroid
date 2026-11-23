@@ -25,10 +25,8 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.Button;
-import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
-import android.text.InputType;
 import android.widget.ScrollView;
 import android.widget.SeekBar;
 import android.widget.TextView;
@@ -102,7 +100,8 @@ public class FloatingPanelService extends Service {
                 panelWidth,
                 panelHeight,
                 type,
-                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                        | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
                         | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
                 PixelFormat.TRANSLUCENT
         );
@@ -213,18 +212,6 @@ public class FloatingPanelService extends Service {
         updateConfiguredSpeedLabel();
         content.addView(configuredSpeedLabel);
 
-        EditText speedInput = new EditText(this);
-        speedInput.setInputType(InputType.TYPE_CLASS_NUMBER);
-        speedInput.setSingleLine(true);
-        speedInput.setText(String.valueOf(clicksPerSecond));
-        speedInput.setHint("Velocidad en clics por segundo");
-        speedInput.setTextSize(16);
-        speedInput.setGravity(Gravity.CENTER);
-        speedInput.setSelectAllOnFocus(true);
-        content.addView(speedInput, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, dp(48)
-        ));
-
         SeekBar speedSeek = new SeekBar(this);
         speedSeek.setMax(MAX_CLICKS_PER_SECOND - 1);
         speedSeek.setProgress(clicksPerSecond - 1);
@@ -239,10 +226,7 @@ public class FloatingPanelService extends Service {
                             SeekBar seekBar, int progress, boolean fromUser
                     ) {
                         if (fromUser) {
-                            int value = progress + 1;
-                            setSpeed(value);
-                            speedInput.setText(String.valueOf(value));
-                            speedInput.setSelection(speedInput.getText().length());
+                            setSpeed(progress + 1);
                         }
                     }
 
@@ -255,29 +239,6 @@ public class FloatingPanelService extends Service {
                     }
                 }
         );
-
-        speedInput.setOnEditorActionListener((view, actionId, event) -> {
-            if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_DONE
-                    || actionId == android.view.inputmethod.EditorInfo.IME_ACTION_GO
-                    || actionId == android.view.inputmethod.EditorInfo.IME_ACTION_NEXT) {
-                applySpeedInput(speedInput, speedSeek);
-                android.view.inputmethod.InputMethodManager keyboard =
-                        (android.view.inputmethod.InputMethodManager)
-                                getSystemService(INPUT_METHOD_SERVICE);
-                if (keyboard != null) {
-                    keyboard.hideSoftInputFromWindow(speedInput.getWindowToken(), 0);
-                }
-                speedInput.clearFocus();
-                return true;
-            }
-            return false;
-        });
-
-        speedInput.setOnFocusChangeListener((view, hasFocus) -> {
-            if (!hasFocus) {
-                applySpeedInput(speedInput, speedSeek);
-            }
-        });
 
         TextView markerLabel = new TextView(this);
         markerLabel.setTextColor(Color.BLACK);
@@ -555,22 +516,6 @@ public class FloatingPanelService extends Service {
                 }
             }
         });
-    }
-
-    private void applySpeedInput(EditText input, SeekBar seekBar) {
-        String value = input.getText().toString().trim();
-        try {
-            int requested = Integer.parseInt(value);
-            if (requested < 1 || requested > MAX_CLICKS_PER_SECOND) {
-                input.setError("Usa un valor entre 1 y " + MAX_CLICKS_PER_SECOND);
-                return;
-            }
-            setSpeed(requested);
-            seekBar.setProgress(requested - 1);
-        } catch (NumberFormatException e) {
-            input.setError("Introduce un número entre 1 y "
-                    + MAX_CLICKS_PER_SECOND);
-        }
     }
 
     private void showSpeedOptions() {
