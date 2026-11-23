@@ -1,5 +1,6 @@
 package com.autoclicker.android;
 
+import android.app.AlertDialog;
 import android.app.Service;
 import android.content.Intent;
 import android.graphics.Color;
@@ -14,8 +15,10 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+import android.text.InputType;
 import android.widget.ScrollView;
 import android.widget.SeekBar;
 import android.widget.TextView;
@@ -200,26 +203,13 @@ public class FloatingPanelService extends Service {
         updateConfiguredSpeedLabel();
         content.addView(configuredSpeedLabel);
 
-        LinearLayout speedButtons = new LinearLayout(this);
-        speedButtons.setOrientation(LinearLayout.HORIZONTAL);
-
-        Button slower = new Button(this);
-        slower.setText("−");
-        slower.setTextSize(24);
-        speedButtons.addView(slower, new LinearLayout.LayoutParams(
-                0, dp(46), 1f
+        Button adjustSpeed = new Button(this);
+        adjustSpeed.setText("⚙ Ajustar velocidad");
+        adjustSpeed.setTextSize(15);
+        content.addView(adjustSpeed, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(46)
         ));
-
-        Button faster = new Button(this);
-        faster.setText("+");
-        faster.setTextSize(24);
-        speedButtons.addView(faster, new LinearLayout.LayoutParams(
-                0, dp(46), 1f
-        ));
-
-        content.addView(speedButtons);
-        slower.setOnClickListener(v -> changeSpeed(-1));
-        faster.setOnClickListener(v -> changeSpeed(1));
+        adjustSpeed.setOnClickListener(v -> showSpeedOptions());
 
         TextView markerLabel = new TextView(this);
         markerLabel.setTextColor(Color.BLACK);
@@ -497,6 +487,123 @@ public class FloatingPanelService extends Service {
                 }
             }
         });
+    }
+
+    private void showSpeedOptions() {
+        new AlertDialog.Builder(this)
+                .setTitle("Ajustar velocidad")
+                .setItems(
+                        new String[]{
+                                "Introducir número",
+                                "Barra deslizante"
+                        },
+                        (dialog, which) -> {
+                            if (which == 0) {
+                                showNumericSpeedDialog();
+                            } else {
+                                showSliderSpeedDialog();
+                            }
+                        }
+                )
+                .setNegativeButton("Cancelar", null)
+                .show();
+    }
+
+    private void showNumericSpeedDialog() {
+        EditText input = new EditText(this);
+        input.setInputType(InputType.TYPE_CLASS_NUMBER);
+        input.setSingleLine(true);
+        input.setText(String.valueOf(clicksPerSecond));
+        input.setSelection(input.getText().length());
+        input.setHint("Entre 1 y " + MAX_CLICKS_PER_SECOND);
+        input.setPadding(dp(16), dp(12), dp(16), dp(12));
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle("Velocidad en clics por segundo")
+                .setMessage("Introduce un valor entre 1 y "
+                        + MAX_CLICKS_PER_SECOND + ".")
+                .setView(input)
+                .setPositiveButton("Aplicar", null)
+                .setNegativeButton("Cancelar", null)
+                .create();
+
+        dialog.setOnShowListener(ignored ->
+                dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+                        .setOnClickListener(v -> {
+                            String value = input.getText().toString().trim();
+                            try {
+                                int requested = Integer.parseInt(value);
+                                if (requested < 1
+                                        || requested > MAX_CLICKS_PER_SECOND) {
+                                    input.setError("Usa un valor entre 1 y "
+                                            + MAX_CLICKS_PER_SECOND);
+                                    return;
+                                }
+                                setSpeed(requested);
+                                dialog.dismiss();
+                            } catch (NumberFormatException e) {
+                                input.setError("Introduce un número válido");
+                            }
+                        })
+        );
+        dialog.show();
+    }
+
+    private void showSliderSpeedDialog() {
+        LinearLayout layout = new LinearLayout(this);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setPadding(dp(20), dp(12), dp(20), dp(4));
+
+        TextView valueLabel = new TextView(this);
+        valueLabel.setTextSize(18);
+        valueLabel.setTextColor(Color.BLACK);
+        valueLabel.setGravity(Gravity.CENTER);
+        valueLabel.setText(clicksPerSecond + " clics/seg");
+        layout.addView(valueLabel);
+
+        SeekBar speedSeek = new SeekBar(this);
+        speedSeek.setMax(MAX_CLICKS_PER_SECOND - 1);
+        speedSeek.setProgress(clicksPerSecond - 1);
+        layout.addView(speedSeek);
+
+        speedSeek.setOnSeekBarChangeListener(
+                new SeekBar.OnSeekBarChangeListener() {
+                    @Override
+                    public void onProgressChanged(
+                            SeekBar seekBar, int progress, boolean fromUser
+                    ) {
+                        valueLabel.setText((progress + 1) + " clics/seg");
+                    }
+
+                    @Override
+                    public void onStartTrackingTouch(SeekBar seekBar) {
+                    }
+
+                    @Override
+                    public void onStopTrackingTouch(SeekBar seekBar) {
+                    }
+                }
+        );
+
+        new AlertDialog.Builder(this)
+                .setTitle("Desliza para ajustar")
+                .setView(layout)
+                .setPositiveButton("Aplicar", (dialog, which) ->
+                        setSpeed(speedSeek.getProgress() + 1))
+                .setNegativeButton("Cancelar", null)
+                .show();
+    }
+
+    private void setSpeed(int speed) {
+        clicksPerSecond = clamp(speed, 1, MAX_CLICKS_PER_SECOND);
+        updateConfiguredSpeedLabel();
+
+        AutoClickService service = AutoClickService.getInstance();
+        if (service != null) {
+            service.setInterval(Math.max(
+                    MIN_INTERVAL_MS, 1000L / clicksPerSecond
+            ));
+        }
     }
 
     private void changeSpeed(int change) {
