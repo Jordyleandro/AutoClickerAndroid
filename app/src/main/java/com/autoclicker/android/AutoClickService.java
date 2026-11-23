@@ -26,6 +26,7 @@ public class AutoClickService extends AccessibilityService {
 
     private long interval = 1L;
     private int clicksPerPoint = 1;
+    private int clicksRemainingInBurst = 0;
 
     private boolean clicking = false;
     private boolean gesturePending = false;
@@ -100,7 +101,9 @@ public class AutoClickService extends AccessibilityService {
 
     public void setClicksPerPoint(int count) {
         clicksPerPoint = Math.max(1, Math.min(3, count));
-
+        if (!clicking) {
+            clicksRemainingInBurst = 0;
+        }
     }
 
     public void startClicks() {
@@ -112,6 +115,8 @@ public class AutoClickService extends AccessibilityService {
 
         clicking = true;
         gesturePending = false;
+        clicksRemainingInBurst = 0;
+
         Log.i(
                 TAG,
                 "Clics iniciados: X=" + clickX
@@ -125,6 +130,7 @@ public class AutoClickService extends AccessibilityService {
 
     public void stopClicks() {
         clicking = false;
+        clicksRemainingInBurst = 0;
         handler.removeCallbacks(clickRunnable);
 
         Log.i(TAG, "Clics detenidos");
@@ -137,30 +143,25 @@ public class AutoClickService extends AccessibilityService {
                 return;
             }
 
-            final int burstCount = clicksPerPoint;
-
-            GestureDescription.Builder builder =
-                    new GestureDescription.Builder();
-
-            // Agrupa 1, 2 o 3 toques consecutivos en un solo envío
-            // para reducir la espera entre callbacks de Android.
-            final long tapSpacingMs = 25L;
-
-            for (int i = 0; i < burstCount; i++) {
-                Path path = new Path();
-                path.moveTo(clickX, clickY);
-
-                GestureDescription.StrokeDescription stroke =
-                        new GestureDescription.StrokeDescription(
-                                path,
-                                i * tapSpacingMs,
-                                GESTURE_DURATION_MS
-                        );
-
-                builder.addStroke(stroke);
+            if (clicksRemainingInBurst <= 0) {
+                clicksRemainingInBurst = clicksPerPoint;
             }
 
-            GestureDescription gesture = builder.build();
+            Path path = new Path();
+            path.moveTo(clickX, clickY);
+
+            GestureDescription.StrokeDescription stroke =
+                    new GestureDescription.StrokeDescription(
+                            path,
+                            0,
+                            GESTURE_DURATION_MS
+                    );
+
+            GestureDescription gesture =
+                    new GestureDescription.Builder()
+                            .addStroke(stroke)
+                            .build();
+
             gesturePending = true;
 
             boolean accepted = dispatchGesture(
@@ -172,13 +173,17 @@ public class AutoClickService extends AccessibilityService {
 
                             gesturePending = false;
 
-                            completedClicks += burstCount;
-                            for (int i = 0; i < burstCount; i++) {
-                                updateClickRate();
-                            }
+                            completedClicks++;
+                            updateClickRate();
                             notifyStats();
 
-                            scheduleNext();
+                            clicksRemainingInBurst--;
+                            if (clicking && clicksRemainingInBurst > 0) {
+                                handler.postDelayed(clickRunnable, interval);
+                            } else {
+                                clicksRemainingInBurst = 0;
+                                scheduleNext();
+                            }
                         }
 
                         @Override
@@ -186,7 +191,10 @@ public class AutoClickService extends AccessibilityService {
                                 GestureDescription description) {
 
                             gesturePending = false;
-                            Log.w(TAG, "Android canceló el gesto agrupado");
+                            clicksRemainingInBurst = 0;
+
+                            Log.w(TAG, "Android canceló un gesto");
+
                             scheduleNext();
                         }
                     },
@@ -195,7 +203,8 @@ public class AutoClickService extends AccessibilityService {
 
             if (!accepted) {
                 gesturePending = false;
-                Log.w(TAG, "Android rechazó el gesto agrupado");
+                clicksRemainingInBurst = 0;
+                Log.w(TAG, "Android rechazó un gesto");
                 scheduleNext();
             }
         }
