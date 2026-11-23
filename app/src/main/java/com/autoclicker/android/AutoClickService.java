@@ -14,8 +14,7 @@ public class AutoClickService extends AccessibilityService {
 
     private static final String TAG = "AutoClicker";
 
-    private static final long GESTURE_DURATION_MS = 20L;
-    private static final long REPEAT_GAP_MS = 100L;
+    private static final long GESTURE_DURATION_MS = 10L;
 
     private static AutoClickService instance;
 
@@ -28,8 +27,6 @@ public class AutoClickService extends AccessibilityService {
     private long interval = 1L;
     private int clicksPerPoint = 1;
     private int clicksRemainingInBurst = 0;
-    private int configuredBurstSize = 1;
-    private int failedGestureRetries = 0;
 
     private boolean clicking = false;
     private boolean gesturePending = false;
@@ -119,8 +116,6 @@ public class AutoClickService extends AccessibilityService {
         clicking = true;
         gesturePending = false;
         clicksRemainingInBurst = 0;
-        configuredBurstSize = clicksPerPoint;
-        failedGestureRetries = 0;
 
         Log.i(
                 TAG,
@@ -149,8 +144,7 @@ public class AutoClickService extends AccessibilityService {
             }
 
             if (clicksRemainingInBurst <= 0) {
-                configuredBurstSize = clicksPerPoint;
-                clicksRemainingInBurst = configuredBurstSize;
+                clicksRemainingInBurst = clicksPerPoint;
             }
 
             Path path = new Path();
@@ -180,13 +174,12 @@ public class AutoClickService extends AccessibilityService {
                             gesturePending = false;
 
                             completedClicks++;
-                            failedGestureRetries = 0;
                             updateClickRate();
                             notifyStats();
 
                             clicksRemainingInBurst--;
                             if (clicking && clicksRemainingInBurst > 0) {
-                                handler.postDelayed(clickRunnable, Math.max(interval, REPEAT_GAP_MS));
+                                handler.postDelayed(clickRunnable, interval);
                             } else {
                                 clicksRemainingInBurst = 0;
                                 scheduleNext();
@@ -198,15 +191,11 @@ public class AutoClickService extends AccessibilityService {
                                 GestureDescription description) {
 
                             gesturePending = false;
-                            failedGestureRetries++;
-                            Log.w(TAG, "Android canceló un gesto; intento " + failedGestureRetries);
-                            if (clicking && failedGestureRetries <= 2) {
-                                handler.postDelayed(clickRunnable, REPEAT_GAP_MS);
-                            } else {
-                                clicksRemainingInBurst = 0;
-                                failedGestureRetries = 0;
-                                scheduleNext();
-                            }
+                            clicksRemainingInBurst = 0;
+
+                            Log.w(TAG, "Android canceló un gesto");
+
+                            scheduleNext();
                         }
                     },
                     handler
@@ -214,15 +203,9 @@ public class AutoClickService extends AccessibilityService {
 
             if (!accepted) {
                 gesturePending = false;
-                failedGestureRetries++;
-                Log.w(TAG, "Android rechazó un gesto; intento " + failedGestureRetries);
-                if (clicking && failedGestureRetries <= 2) {
-                    handler.postDelayed(clickRunnable, REPEAT_GAP_MS);
-                } else {
-                    clicksRemainingInBurst = 0;
-                    failedGestureRetries = 0;
-                    scheduleNext();
-                }
+                clicksRemainingInBurst = 0;
+                Log.w(TAG, "Android rechazó un gesto");
+                scheduleNext();
             }
         }
     };
