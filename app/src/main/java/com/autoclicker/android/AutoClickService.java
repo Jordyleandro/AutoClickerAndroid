@@ -179,7 +179,9 @@ public class AutoClickService extends AccessibilityService {
 
                             clicksRemainingInBurst--;
                             if (clicking && clicksRemainingInBurst > 0) {
-                                handler.postDelayed(clickRunnable, interval);
+                                // Continue the current 2/3-tap burst immediately;
+                                // keep the configured 1 ms interval between cycles.
+                                handler.post(clickRunnable);
                             } else {
                                 clicksRemainingInBurst = 0;
                                 scheduleNext();
