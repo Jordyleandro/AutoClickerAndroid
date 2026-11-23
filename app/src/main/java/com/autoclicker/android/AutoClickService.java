@@ -8,25 +8,19 @@ import android.os.Looper;
 import android.os.SystemClock;
 import android.util.Log;
 import android.view.accessibility.AccessibilityEvent;
-import android.widget.Toast;
 
 public class AutoClickService extends AccessibilityService {
-
     private static final String TAG = "AutoClicker";
-
     private static final long GESTURE_DURATION_MS = 10L;
-
+    private static final long MIN_TAP_GAP_MS = 12L;
     private static AutoClickService instance;
 
-    private final Handler handler =
-            new Handler(Looper.getMainLooper());
-
+    private final Handler handler = new Handler(Looper.getMainLooper());
     private int clickX = 500;
     private int clickY = 500;
-
-    private long interval = 1L;
+    private long interval = 12L;
     private int clicksPerPoint = 1;
-
+    private int tapsRemaining = 0;
     private boolean clicking = false;
     private boolean gesturePending = false;
 
@@ -41,22 +35,13 @@ public class AutoClickService extends AccessibilityService {
 
     private StatsListener statsListener;
 
-    public static AutoClickService getInstance() {
-        return instance;
-    }
+    public static AutoClickService getInstance() { return instance; }
 
     @Override
     protected void onServiceConnected() {
         super.onServiceConnected();
         instance = this;
-
         Log.i(TAG, "Servicio de accesibilidad conectado");
-
-        Toast.makeText(
-                this,
-                "Servicio AutoClicker conectado",
-                Toast.LENGTH_SHORT
-        ).show();
     }
 
     public void setStatsListener(StatsListener listener) {
@@ -64,13 +49,8 @@ public class AutoClickService extends AccessibilityService {
         notifyStats();
     }
 
-    public long getCompletedClicks() {
-        return completedClicks;
-    }
-
-    public int getClicksPerSecond() {
-        return clicksPerSecond;
-    }
+    public long getCompletedClicks() { return completedClicks; }
+    public int getClicksPerSecond() { return clicksPerSecond; }
 
     public void resetStats() {
         completedClicks = 0L;
@@ -82,10 +62,7 @@ public class AutoClickService extends AccessibilityService {
 
     private void notifyStats() {
         if (statsListener != null) {
-            statsListener.onClickStatsUpdated(
-                    completedClicks,
-                    clicksPerSecond
-            );
+            statsListener.onClickStatsUpdated(completedClicks, clicksPerSecond);
         }
     }
 
@@ -94,165 +71,110 @@ public class AutoClickService extends AccessibilityService {
         clickY = Math.max(1, y);
     }
 
+    // Intervalo total de un ciclo: se reparte entre 1, 2 o 3 toques reales.
     public void setInterval(long milliseconds) {
-        interval = Math.max(1L, milliseconds);
+        interval = Math.max(MIN_TAP_GAP_MS, milliseconds);
     }
 
     public void setClicksPerPoint(int count) {
         clicksPerPoint = Math.max(1, Math.min(3, count));
-
+        if (clicking && !gesturePending) {
+            tapsRemaining = clicksPerPoint;
+        }
     }
 
     public void startClicks() {
-        if (instance != this || clicking) {
-            return;
-        }
-
+        if (instance != this || clicking) return;
         resetStats();
-
         clicking = true;
         gesturePending = false;
-        Log.i(
-                TAG,
-                "Clics iniciados: X=" + clickX
-                        + ", Y=" + clickY
-                        + ", intervalo=" + interval + " ms"
-        );
-
+        tapsRemaining = clicksPerPoint;
         handler.removeCallbacks(clickRunnable);
         handler.post(clickRunnable);
     }
 
     public void stopClicks() {
         clicking = false;
+        tapsRemaining = 0;
         handler.removeCallbacks(clickRunnable);
-
         Log.i(TAG, "Clics detenidos");
     }
 
     private final Runnable clickRunnable = new Runnable() {
         @Override
         public void run() {
-            if (!clicking || gesturePending) {
-                return;
+            if (!clicking || gesturePending) return;
+
+            if (tapsRemaining <= 0) {
+                tapsRemaining = clicksPerPoint;
             }
 
-            final int burstCount = clicksPerPoint;
+            Path path = new Path();
+            path.moveTo(clickX, clickY);
+            GestureDescription gesture = new GestureDescription.Builder()
+                    .addStroke(new GestureDescription.StrokeDescription(
+                            path, 0L, GESTURE_DURATION_MS))
+                    .build();
 
-            GestureDescription.Builder builder =
-                    new GestureDescription.Builder();
-
-            // Agrupa 1, 2 o 3 toques consecutivos en un solo envío
-            // para reducir la espera entre callbacks de Android.
-            final long tapSpacingMs = 25L;
-
-            for (int i = 0; i < burstCount; i++) {
-                Path path = new Path();
-                path.moveTo(clickX, clickY);
-
-                GestureDescription.StrokeDescription stroke =
-                        new GestureDescription.StrokeDescription(
-                                path,
-                                i * tapSpacingMs,
-                                GESTURE_DURATION_MS
-                        );
-
-                builder.addStroke(stroke);
-            }
-
-            GestureDescription gesture = builder.build();
             gesturePending = true;
+            boolean accepted = dispatchGesture(gesture, new GestureResultCallback() {
+                @Override
+                public void onCompleted(GestureDescription description) {
+                    gesturePending = false;
+                    completedClicks++;
+                    updateClickRate();
+                    notifyStats();
 
-            boolean accepted = dispatchGesture(
-                    gesture,
-                    new GestureResultCallback() {
-                        @Override
-                        public void onCompleted(
-                                GestureDescription description) {
+                    tapsRemaining--;
+                    if (!clicking) return;
 
-                            gesturePending = false;
+                    if (tapsRemaining > 0) {
+                        long tapGap = Math.max(MIN_TAP_GAP_MS,
+                                interval / Math.max(1, clicksPerPoint));
+                        handler.postDelayed(clickRunnable, tapGap);
+                    } else {
+                        handler.post(clickRunnable);
+                    }
+                }
 
-                            completedClicks += burstCount;
-                            long now = SystemClock.elapsedRealtime();
-                            if (rateWindowStart == 0L) {
-                                rateWindowStart = now;
-                            }
-                            // Cuenta cada toque agrupado una sola vez en la tasa por segundo.
-                            for (int i = 0; i < burstCount; i++) {
-                                updateClickRate();
-                            }
-                            notifyStats();
-
-                            scheduleNext();
-                        }
-
-                        @Override
-                        public void onCancelled(
-                                GestureDescription description) {
-
-                            gesturePending = false;
-                            Log.w(TAG, "Android canceló el gesto agrupado");
-                            scheduleNext();
-                        }
-                    },
-                    handler
-            );
+                @Override
+                public void onCancelled(GestureDescription description) {
+                    gesturePending = false;
+                    if (clicking) handler.postDelayed(clickRunnable, MIN_TAP_GAP_MS);
+                }
+            }, handler);
 
             if (!accepted) {
                 gesturePending = false;
-                Log.w(TAG, "Android rechazó el gesto agrupado");
-                scheduleNext();
+                Log.w(TAG, "Android rechazó el toque; se reintentará con pausa");
+                if (clicking) handler.postDelayed(this, 50L);
             }
         }
     };
 
     private void updateClickRate() {
         long now = SystemClock.elapsedRealtime();
-
-        if (rateWindowStart == 0L) {
-            rateWindowStart = now;
-        }
-
+        if (rateWindowStart == 0L) rateWindowStart = now;
         clicksInWindow++;
-
         long elapsed = now - rateWindowStart;
-
         if (elapsed >= 1000L) {
-            clicksPerSecond = (int) Math.round(
-                    clicksInWindow * 1000.0 / elapsed
-            );
-
+            clicksPerSecond = (int) Math.round(clicksInWindow * 1000.0 / elapsed);
             clicksInWindow = 0;
             rateWindowStart = now;
         }
     }
 
-    private void scheduleNext() {
-        if (clicking) {
-            handler.postDelayed(clickRunnable, interval);
-        }
-    }
+    @Override
+    public void onAccessibilityEvent(AccessibilityEvent event) { }
 
     @Override
-    public void onAccessibilityEvent(AccessibilityEvent event) {
-        // No se necesitan eventos para programar los gestos.
-    }
-
-    @Override
-    public void onInterrupt() {
-        stopClicks();
-    }
+    public void onInterrupt() { stopClicks(); }
 
     @Override
     public void onDestroy() {
         stopClicks();
-
         statsListener = null;
-
-        if (instance == this) {
-            instance = null;
-        }
-
+        if (instance == this) instance = null;
         super.onDestroy();
     }
 }
