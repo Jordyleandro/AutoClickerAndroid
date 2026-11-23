@@ -3,7 +3,7 @@ name: AutoClickerNuevo APK
 on:
   workflow_dispatch:
   push:
-    branches: [main, master, prueba-3-toques]
+    branches: [main, master, prueba-3-toques, action124-sin-sonido-logo]
 
 jobs:
   build:
@@ -40,4 +40,3 @@ jobs:
           name: AutoClicker-APK
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
-          
