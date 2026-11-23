@@ -173,12 +173,9 @@ public class AutoClickService extends AccessibilityService {
                             gesturePending = false;
 
                             completedClicks += burstCount;
-                            long now = SystemClock.elapsedRealtime();
-                            if (rateWindowStart == 0L) {
-                                rateWindowStart = now;
+                            for (int i = 0; i < burstCount; i++) {
+                                updateClickRate();
                             }
-                            clicksInWindow += burstCount;
-                            updateClickRate();
                             notifyStats();
 
                             scheduleNext();
