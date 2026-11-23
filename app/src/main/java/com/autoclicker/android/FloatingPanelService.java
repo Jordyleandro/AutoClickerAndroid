@@ -507,7 +507,7 @@ public class FloatingPanelService extends Service {
                                 "Introducir número",
                                 "Barra deslizante"
                         },
-                        (dialog, which) -> {
+                        (ignoredDialog, which) -> {
                             if (which == 0) {
                                 showNumericSpeedDialog();
                             } else {
@@ -599,7 +599,7 @@ public class FloatingPanelService extends Service {
         AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("Desliza para ajustar")
                 .setView(layout)
-                .setPositiveButton("Aplicar", (dialog, which) ->
+                .setPositiveButton("Aplicar", (ignoredDialog, which) ->
                         setSpeed(speedSeek.getProgress() + 1))
                 .setNegativeButton("Cancelar", null)
                 .create();
