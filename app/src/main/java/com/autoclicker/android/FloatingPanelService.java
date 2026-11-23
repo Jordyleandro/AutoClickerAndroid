@@ -50,7 +50,7 @@ public class FloatingPanelService extends Service {
     private WindowManager.LayoutParams miniParams;
 
     private int markerSize = 48;
-    private int clicksPerSecond = 10;
+    private int clicksPerSecond = 90;
     private int clicksPerPoint = 1;
     private int panelWidth = 300;
     private int panelHeight = 440;
@@ -61,8 +61,8 @@ public class FloatingPanelService extends Service {
 
     private static final int MIN_PANEL_WIDTH = 200;
     private static final int MIN_PANEL_HEIGHT = 180;
-    private static final int MAX_CLICKS_PER_SECOND = 1500;
-    private static final int MIN_INTERVAL_MS = 1;
+    private static final int MAX_CLICKS_PER_SECOND = 100;
+    private static final int MIN_INTERVAL_MS = 12;
     private static final int DRAG_THRESHOLD_DP = 3;
 
     private final AutoClickService.StatsListener statsListener =
@@ -355,9 +355,7 @@ public class FloatingPanelService extends Service {
         updateClickPosition();
         service.setStatsListener(statsListener);
         service.setClicksPerPoint(clicksPerPoint);
-        service.setInterval(Math.max(
-                MIN_INTERVAL_MS, 1000L / clicksPerSecond
-        ));
+        service.setInterval(cycleIntervalMs());
         service.startClicks();
 
         setMarkerTouchable(false);
@@ -553,6 +551,7 @@ public class FloatingPanelService extends Service {
         AutoClickService service = AutoClickService.getInstance();
         if (service != null) {
             service.setClicksPerPoint(clicksPerPoint);
+            service.setInterval(cycleIntervalMs());
         }
     }
 
@@ -577,9 +576,7 @@ public class FloatingPanelService extends Service {
 
         AutoClickService service = AutoClickService.getInstance();
         if (service != null) {
-            service.setInterval(Math.max(
-                    MIN_INTERVAL_MS, 1000L / clicksPerSecond
-            ));
+            service.setInterval(cycleIntervalMs());
         }
     }
 
@@ -599,10 +596,16 @@ public class FloatingPanelService extends Service {
         }
     }
 
+    private long cycleIntervalMs() {
+        // Limita la carga total: los modos 2 y 3 reparten el mismo CPS entre toques separados.
+        long interval = (1000L * clicksPerPoint) / Math.max(1, clicksPerSecond);
+        return Math.max(MIN_INTERVAL_MS * clicksPerPoint, interval);
+    }
+
     private void updateConfiguredSpeedLabel() {
         if (configuredSpeedLabel != null) {
             configuredSpeedLabel.setText(
-                    "Velocidad: " + clicksPerSecond + " clics/seg"
+                    "Velocidad: " + clicksPerSecond + " CPS objetivo"
             );
         }
     }
