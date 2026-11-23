@@ -19,7 +19,7 @@ public class AutoClickService extends AccessibilityService {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private int clickX = 500;
     private int clickY = 500;
-    private long interval = 1L;
+    private long interval = 50L;
     private int clicksPerTouch = 1;
     private boolean clicking = false;
     private boolean gesturePending = false;
@@ -79,11 +79,11 @@ public class AutoClickService extends AccessibilityService {
     }
 
     public void setInterval(long milliseconds) {
-        interval = Math.max(1L, milliseconds);
+        interval = Math.max(50L, milliseconds);
     }
 
     public void setClicksPerTouch(int count) {
-        clicksPerTouch = Math.max(1, Math.min(3, count));
+        clicksPerTouch = 1;
     }
 
     public void startClicks() {
@@ -114,15 +114,12 @@ public class AutoClickService extends AccessibilityService {
 
             GestureDescription.Builder gestureBuilder = new GestureDescription.Builder();
 
-            // Conserva exactamente los 1, 2 o 3 toques simultáneos de Action #124.
-            for (int i = 0; i < clicksPerTouch; i++) {
-                Path path = new Path();
-                path.moveTo(clickX, clickY);
-                GestureDescription.StrokeDescription stroke =
-                        new GestureDescription.StrokeDescription(
-                                path, 0, GESTURE_DURATION_MS);
-                gestureBuilder.addStroke(stroke);
-            }
+            Path path = new Path();
+            path.moveTo(clickX, clickY);
+            GestureDescription.StrokeDescription stroke =
+                    new GestureDescription.StrokeDescription(
+                            path, 0, GESTURE_DURATION_MS);
+            gestureBuilder.addStroke(stroke);
 
             GestureDescription gesture = gestureBuilder.build();
             gesturePending = true;
@@ -133,7 +130,7 @@ public class AutoClickService extends AccessibilityService {
                         @Override
                         public void onCompleted(GestureDescription description) {
                             gesturePending = false;
-                            completedClicks += clicksPerTouch;
+                            completedClicks++;
                             updateClickRate();
                             notifyStats();
                             scheduleNext();
