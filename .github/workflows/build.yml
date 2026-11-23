@@ -31,13 +31,22 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Compilar APK
-        run: gradle :app:assembleDebug
+      - name: Compilar APK limpio
+        run: |
+          gradle --stop || true
+          gradle clean :app:assembleDebug --no-build-cache
+
+      - name: Verificar APK y firma
+        run: |
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK"
+          ls -lh "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK"
+          unzip -t "$APK"
 
       - name: Publicar APK
         uses: actions/upload-artifact@v4
         with:
           name: AutoClicker-APK
-          path: app/build/outputs/apk/debug/*.apk
+          path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
-          
