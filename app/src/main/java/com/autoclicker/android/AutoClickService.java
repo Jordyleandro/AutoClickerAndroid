@@ -12,7 +12,7 @@ import android.view.accessibility.AccessibilityEvent;
 public class AutoClickService extends AccessibilityService {
     private static final String TAG = "AutoClicker";
     private static final long GESTURE_DURATION_MS = 10L;
-    private static final long MIN_TAP_GAP_MS = 12L;
+    private static final long MIN_TAP_GAP_MS = 1L;
     private static AutoClickService instance;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -71,16 +71,14 @@ public class AutoClickService extends AccessibilityService {
         clickY = Math.max(1, y);
     }
 
-    // Intervalo total de un ciclo: se reparte entre 1, 2 o 3 toques reales.
+    // El intervalo representa el ciclo completo, no cada toque individual.
     public void setInterval(long milliseconds) {
-        interval = Math.max(MIN_TAP_GAP_MS, milliseconds);
+        interval = Math.max(1L, milliseconds);
     }
 
     public void setClicksPerPoint(int count) {
         clicksPerPoint = Math.max(1, Math.min(3, count));
-        if (clicking && !gesturePending) {
-            tapsRemaining = clicksPerPoint;
-        }
+        if (clicking && !gesturePending) tapsRemaining = clicksPerPoint;
     }
 
     public void startClicks() {
@@ -104,10 +102,7 @@ public class AutoClickService extends AccessibilityService {
         @Override
         public void run() {
             if (!clicking || gesturePending) return;
-
-            if (tapsRemaining <= 0) {
-                tapsRemaining = clicksPerPoint;
-            }
+            if (tapsRemaining <= 0) tapsRemaining = clicksPerPoint;
 
             Path path = new Path();
             path.moveTo(clickX, clickY);
@@ -124,29 +119,27 @@ public class AutoClickService extends AccessibilityService {
                     completedClicks++;
                     updateClickRate();
                     notifyStats();
-
                     tapsRemaining--;
-                    if (!clicking) return;
 
-                    if (tapsRemaining > 0) {
-                        long tapGap = Math.max(MIN_TAP_GAP_MS,
-                                interval / Math.max(1, clicksPerPoint));
-                        handler.postDelayed(clickRunnable, tapGap);
-                    } else {
-                        handler.post(clickRunnable);
+                    if (clicking) {
+                        long slot = interval / Math.max(1, clicksPerPoint);
+                        long pause = Math.max(MIN_TAP_GAP_MS,
+                                slot - GESTURE_DURATION_MS);
+                        // Cada toque se envía como un gesto independiente.
+                        handler.postDelayed(clickRunnable, pause);
                     }
                 }
 
                 @Override
                 public void onCancelled(GestureDescription description) {
                     gesturePending = false;
-                    if (clicking) handler.postDelayed(clickRunnable, MIN_TAP_GAP_MS);
+                    if (clicking) handler.postDelayed(clickRunnable, 30L);
                 }
             }, handler);
 
             if (!accepted) {
                 gesturePending = false;
-                Log.w(TAG, "Android rechazó el toque; se reintentará con pausa");
+                Log.w(TAG, "Android rechazó el toque; reintento pausado");
                 if (clicking) handler.postDelayed(this, 50L);
             }
         }
