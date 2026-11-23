@@ -590,9 +590,7 @@ public class FloatingPanelService extends Service {
 
         AutoClickService service = AutoClickService.getInstance();
         if (service != null) {
-            service.setInterval(Math.max(
-                    MIN_INTERVAL_MS, 1000L / clicksPerSecond
-            ));
+            service.setInterval(cycleIntervalMs());
         }
     }
 
