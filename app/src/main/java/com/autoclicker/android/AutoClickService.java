@@ -3,8 +3,6 @@ package com.autoclicker.android;
 import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.GestureDescription;
 import android.graphics.Path;
-import android.media.AudioManager;
-import android.media.ToneGenerator;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
@@ -15,29 +13,20 @@ import android.widget.Toast;
 public class AutoClickService extends AccessibilityService {
 
     private static final String TAG = "AutoClicker";
-
     private static final long GESTURE_DURATION_MS = 10L;
-
     private static AutoClickService instance;
 
-    private final Handler handler =
-            new Handler(Looper.getMainLooper());
-
+    private final Handler handler = new Handler(Looper.getMainLooper());
     private int clickX = 500;
     private int clickY = 500;
-
     private long interval = 1L;
     private int clicksPerTouch = 1;
-
     private boolean clicking = false;
     private boolean gesturePending = false;
-
     private long completedClicks = 0L;
     private long rateWindowStart = 0L;
     private int clicksInWindow = 0;
     private int clicksPerSecond = 0;
-
-    private ToneGenerator toneGenerator;
 
     public interface StatsListener {
         void onClickStatsUpdated(long total, int clicksPerSecond);
@@ -53,23 +42,8 @@ public class AutoClickService extends AccessibilityService {
     protected void onServiceConnected() {
         super.onServiceConnected();
         instance = this;
-
-        try {
-            toneGenerator = new ToneGenerator(
-                    AudioManager.STREAM_MUSIC,
-                    70
-            );
-        } catch (RuntimeException e) {
-            Log.e(TAG, "No se pudo iniciar el sonido", e);
-        }
-
         Log.i(TAG, "Servicio de accesibilidad conectado");
-
-        Toast.makeText(
-                this,
-                "Servicio AutoClicker conectado",
-                Toast.LENGTH_SHORT
-        ).show();
+        Toast.makeText(this, "Servicio AutoClicker conectado", Toast.LENGTH_SHORT).show();
     }
 
     public void setStatsListener(StatsListener listener) {
@@ -95,10 +69,7 @@ public class AutoClickService extends AccessibilityService {
 
     private void notifyStats() {
         if (statsListener != null) {
-            statsListener.onClickStatsUpdated(
-                    completedClicks,
-                    clicksPerSecond
-            );
+            statsListener.onClickStatsUpdated(completedClicks, clicksPerSecond);
         }
     }
 
@@ -119,19 +90,11 @@ public class AutoClickService extends AccessibilityService {
         if (instance != this || clicking) {
             return;
         }
-
         resetStats();
-
         clicking = true;
         gesturePending = false;
-
-        Log.i(
-                TAG,
-                "Clics iniciados: X=" + clickX
-                        + ", Y=" + clickY
-                        + ", intervalo=" + interval + " ms"
-        );
-
+        Log.i(TAG, "Clics iniciados: X=" + clickX + ", Y=" + clickY
+                + ", intervalo=" + interval + " ms");
         handler.removeCallbacks(clickRunnable);
         handler.post(clickRunnable);
     }
@@ -139,7 +102,6 @@ public class AutoClickService extends AccessibilityService {
     public void stopClicks() {
         clicking = false;
         handler.removeCallbacks(clickRunnable);
-
         Log.i(TAG, "Clics detenidos");
     }
 
@@ -150,52 +112,37 @@ public class AutoClickService extends AccessibilityService {
                 return;
             }
 
-            GestureDescription.Builder gestureBuilder =
-                    new GestureDescription.Builder();
+            GestureDescription.Builder gestureBuilder = new GestureDescription.Builder();
 
-            // Envía de 1 a 3 toques simultáneos en la misma coordenada.
+            // Conserva exactamente los 1, 2 o 3 toques simultáneos de Action #124.
             for (int i = 0; i < clicksPerTouch; i++) {
                 Path path = new Path();
                 path.moveTo(clickX, clickY);
-
                 GestureDescription.StrokeDescription stroke =
                         new GestureDescription.StrokeDescription(
-                                path,
-                                0,
-                                GESTURE_DURATION_MS
-                        );
+                                path, 0, GESTURE_DURATION_MS);
                 gestureBuilder.addStroke(stroke);
             }
 
             GestureDescription gesture = gestureBuilder.build();
-
             gesturePending = true;
 
             boolean accepted = dispatchGesture(
                     gesture,
                     new GestureResultCallback() {
                         @Override
-                        public void onCompleted(
-                                GestureDescription description) {
-
+                        public void onCompleted(GestureDescription description) {
                             gesturePending = false;
-
                             completedClicks += clicksPerTouch;
                             updateClickRate();
-                            playClickSound();
                             notifyStats();
-
                             scheduleNext();
                         }
 
                         @Override
-                        public void onCancelled(
-                                GestureDescription description) {
-
+                        public void onCancelled(GestureDescription description) {
                             gesturePending = false;
-
                             Log.w(TAG, "Android canceló un gesto");
-
                             scheduleNext();
                         }
                     },
@@ -212,37 +159,15 @@ public class AutoClickService extends AccessibilityService {
 
     private void updateClickRate() {
         long now = SystemClock.elapsedRealtime();
-
         if (rateWindowStart == 0L) {
             rateWindowStart = now;
         }
-
         clicksInWindow++;
-
         long elapsed = now - rateWindowStart;
-
         if (elapsed >= 1000L) {
-            clicksPerSecond = (int) Math.round(
-                    clicksInWindow * 1000.0 / elapsed
-            );
-
+            clicksPerSecond = (int) Math.round(clicksInWindow * 1000.0 / elapsed);
             clicksInWindow = 0;
             rateWindowStart = now;
-        }
-    }
-
-    private void playClickSound() {
-        if (toneGenerator == null) {
-            return;
-        }
-
-        try {
-            toneGenerator.startTone(
-                    ToneGenerator.TONE_PROP_BEEP,
-                    30
-            );
-        } catch (RuntimeException e) {
-            Log.w(TAG, "No se pudo reproducir el sonido", e);
         }
     }
 
@@ -265,18 +190,10 @@ public class AutoClickService extends AccessibilityService {
     @Override
     public void onDestroy() {
         stopClicks();
-
         statsListener = null;
-
-        if (toneGenerator != null) {
-            toneGenerator.release();
-            toneGenerator = null;
-        }
-
         if (instance == this) {
             instance = null;
         }
-
         super.onDestroy();
     }
 }
