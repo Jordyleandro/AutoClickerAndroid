@@ -3,8 +3,6 @@ package com.autoclicker.android;
 import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.GestureDescription;
 import android.graphics.Path;
-import android.media.AudioManager;
-import android.media.ToneGenerator;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
@@ -36,8 +34,6 @@ public class AutoClickService extends AccessibilityService {
     private int clicksInWindow = 0;
     private int clicksPerSecond = 0;
 
-    private ToneGenerator toneGenerator;
-
     public interface StatsListener {
         void onClickStatsUpdated(long total, int clicksPerSecond);
     }
@@ -52,15 +48,6 @@ public class AutoClickService extends AccessibilityService {
     protected void onServiceConnected() {
         super.onServiceConnected();
         instance = this;
-
-        try {
-            toneGenerator = new ToneGenerator(
-                    AudioManager.STREAM_MUSIC,
-                    70
-            );
-        } catch (RuntimeException e) {
-            Log.e(TAG, "No se pudo iniciar el sonido", e);
-        }
 
         Log.i(TAG, "Servicio de accesibilidad conectado");
 
@@ -173,7 +160,6 @@ public class AutoClickService extends AccessibilityService {
 
                             completedClicks++;
                             updateClickRate();
-                            playClickSound();
                             notifyStats();
 
                             scheduleNext();
@@ -222,21 +208,6 @@ public class AutoClickService extends AccessibilityService {
         }
     }
 
-    private void playClickSound() {
-        if (toneGenerator == null) {
-            return;
-        }
-
-        try {
-            toneGenerator.startTone(
-                    ToneGenerator.TONE_PROP_BEEP,
-                    30
-            );
-        } catch (RuntimeException e) {
-            Log.w(TAG, "No se pudo reproducir el sonido", e);
-        }
-    }
-
     private void scheduleNext() {
         if (clicking) {
             handler.postDelayed(clickRunnable, interval);
@@ -258,11 +229,6 @@ public class AutoClickService extends AccessibilityService {
         stopClicks();
 
         statsListener = null;
-
-        if (toneGenerator != null) {
-            toneGenerator.release();
-            toneGenerator = null;
-        }
 
         if (instance == this) {
             instance = null;
