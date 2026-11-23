@@ -3,7 +3,7 @@ name: AutoClickerNuevo APK
 on:
   workflow_dispatch:
   push:
-    branches: [main, master]
+    branches: [main, master, prueba-3-toques]
 
 jobs:
   build:
