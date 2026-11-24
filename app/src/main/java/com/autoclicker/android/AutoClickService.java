@@ -12,7 +12,7 @@ import android.view.accessibility.AccessibilityEvent;
 public class AutoClickService extends AccessibilityService {
     private static final String TAG = "AutoClicker";
     private static final long GESTURE_DURATION_MS = 10L;
-    private static final long MIN_TAP_GAP_MS = 1L;
+    private static final long MIN_TAP_GAP_MS = 50L;
     private static AutoClickService instance;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -73,7 +73,7 @@ public class AutoClickService extends AccessibilityService {
 
     // El intervalo representa el ciclo completo, no cada toque individual.
     public void setInterval(long milliseconds) {
-        interval = Math.max(1L, milliseconds);
+        interval = Math.max(50L, milliseconds);
     }
 
     public void setClicksPerPoint(int count) {
@@ -92,10 +92,11 @@ public class AutoClickService extends AccessibilityService {
     }
 
     public void stopClicks() {
+        // Desactivar primero el bucle para que ningún callback pueda reanudarlo.
         clicking = false;
         tapsRemaining = 0;
         handler.removeCallbacks(clickRunnable);
-        Log.i(TAG, "Clics detenidos");
+        Log.i(TAG, "PARADA DE EMERGENCIA: clics detenidos");
     }
 
     private final Runnable clickRunnable = new Runnable() {
@@ -133,14 +134,14 @@ public class AutoClickService extends AccessibilityService {
                 @Override
                 public void onCancelled(GestureDescription description) {
                     gesturePending = false;
-                    if (clicking) handler.postDelayed(clickRunnable, 30L);
+                    if (clicking) handler.postDelayed(clickRunnable, 250L);
                 }
             }, handler);
 
             if (!accepted) {
                 gesturePending = false;
                 Log.w(TAG, "Android rechazó el toque; reintento pausado");
-                if (clicking) handler.postDelayed(this, 50L);
+                if (clicking) handler.postDelayed(this, 250L);
             }
         }
     };
