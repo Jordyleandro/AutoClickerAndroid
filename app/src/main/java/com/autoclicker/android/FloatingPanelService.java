@@ -154,17 +154,6 @@ public class FloatingPanelService extends Service {
                 0, -2, 1f
         ));
 
-        // Parada de emergencia siempre visible, fuera del área desplazable.
-        Button emergencyStop = new Button(this);
-        emergencyStop.setText("■ STOP");
-        emergencyStop.setTextSize(12);
-        emergencyStop.setTextColor(Color.RED);
-        emergencyStop.setContentDescription("DETENER inmediatamente todos los clics");
-        header.addView(emergencyStop, new LinearLayout.LayoutParams(
-                dp(82), dp(44)
-        ));
-        emergencyStop.setOnClickListener(v -> stopClicks());
-
         Button minimize = new Button(this);
         minimize.setText("−");
         minimize.setTextSize(18);
@@ -377,10 +366,7 @@ public class FloatingPanelService extends Service {
 
         Button close = new Button(this);
         close.setText("✕ Cerrar panel");
-        close.setOnClickListener(v -> {
-            stopClicks();
-            stopSelf();
-        });
+        close.setOnClickListener(v -> stopSelf());
         content.addView(close);
 
         panel.addView(scroll, new LinearLayout.LayoutParams(
@@ -993,10 +979,8 @@ public class FloatingPanelService extends Service {
 
     @Override
     public void onDestroy() {
-        // Cerrar el panel también debe detener el motor de clics.
         AutoClickService service = AutoClickService.getInstance();
         if (service != null) {
-            service.stopClicks();
             service.setStatsListener(null);
         }
 
