@@ -142,7 +142,7 @@ public class FloatingPanelService extends Service {
         header.setBackgroundColor(Color.BLACK);
 
         TextView title = new TextView(this);
-        title.setText("AUTOCILCK Desactivado");
+        title.setText("AUTOCLICK Desactivado");
         title.setTextColor(Color.RED);
         title.setTextSize(16);
         title.setPadding(dp(8), dp(8), dp(4), dp(8));
@@ -188,7 +188,7 @@ public class FloatingPanelService extends Service {
         content.addView(resetCounter, new LinearLayout.LayoutParams(dp(92), dp(38)));
 
         actualSpeedLabel = new TextView(this);
-        actualSpeedLabel.setTextColor(Color.DKGRAY);
+        actualSpeedLabel.setTextColor(Color.YELLOW);
         actualSpeedLabel.setTextSize(14);
         actualSpeedLabel.setText("Velocidad actual: 0/seg");
         content.addView(actualSpeedLabel);
@@ -222,7 +222,7 @@ public class FloatingPanelService extends Service {
         stop.setOnClickListener(v -> stopClicks());
 
         clickCountLabel = new TextView(this);
-        clickCountLabel.setTextColor(Color.BLACK);
+        clickCountLabel.setTextColor(Color.RED);
         clickCountLabel.setTextSize(15);
         clickCountLabel.setGravity(Gravity.CENTER);
         content.addView(clickCountLabel);
@@ -253,7 +253,7 @@ public class FloatingPanelService extends Service {
         content.addView(coordinateLabel);
 
         configuredSpeedLabel = new TextView(this);
-        configuredSpeedLabel.setTextColor(Color.BLACK);
+        configuredSpeedLabel.setTextColor(Color.YELLOW);
         configuredSpeedLabel.setTextSize(15);
         configuredSpeedLabel.setGravity(Gravity.CENTER);
         updateConfiguredSpeedLabel();
@@ -657,7 +657,8 @@ public class FloatingPanelService extends Service {
     private void updateConfiguredSpeedLabel() {
         if (configuredSpeedLabel != null) {
             configuredSpeedLabel.setText(
-                    "Velocidad: " + clicksPerSecond + " CPS objetivo"
+                    "Clicks por Segundo -> " + clicksPerSecond
+                            + "     Intervalo MS -> " + cycleIntervalMs()
             );
         }
     }
@@ -667,7 +668,6 @@ public class FloatingPanelService extends Service {
         fallback.setColor(Color.BLACK);
         fallback.setCornerRadius(dp(5));
         fallback.setStroke(dp(2), Color.rgb(0, 190, 0));
-        loadRingBackgroundImage();
         return fallback;
     }
 
