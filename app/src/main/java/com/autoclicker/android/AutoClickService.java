@@ -77,7 +77,7 @@ public class AutoClickService extends AccessibilityService {
     }
 
     public void setClicksPerPoint(int count) {
-        clicksPerPoint = Math.max(1, Math.min(3, count));
+        clicksPerPoint = Math.max(1, Math.min(6, count));
         if (clicking && !gesturePending) tapsRemaining = clicksPerPoint;
     }
 
