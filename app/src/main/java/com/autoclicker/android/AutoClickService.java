@@ -23,6 +23,7 @@ public class AutoClickService extends AccessibilityService {
     private int tapsRemaining = 0;
     private boolean clicking = false;
     private boolean gesturePending = false;
+    private long runGeneration = 0L;
 
     private long completedClicks = 0L;
     private long rateWindowStart = 0L;
@@ -84,6 +85,7 @@ public class AutoClickService extends AccessibilityService {
     public void startClicks() {
         if (instance != this || clicking) return;
         resetStats();
+        runGeneration++;
         clicking = true;
         gesturePending = false;
         tapsRemaining = clicksPerPoint;
@@ -94,9 +96,11 @@ public class AutoClickService extends AccessibilityService {
     public void stopClicks() {
         // Desactivar primero el bucle para que ningún callback pueda reanudarlo.
         clicking = false;
+        runGeneration++;
         tapsRemaining = 0;
-        handler.removeCallbacks(clickRunnable);
-        Log.i(TAG, "PARADA DE EMERGENCIA: clics detenidos");
+        handler.removeCallbacksAndMessages(null);
+        gesturePending = false;
+        Log.i(TAG, "PARADA: bucle de clics detenido");
     }
 
     private final Runnable clickRunnable = new Runnable() {
@@ -105,6 +109,7 @@ public class AutoClickService extends AccessibilityService {
             if (!clicking || gesturePending) return;
             if (tapsRemaining <= 0) tapsRemaining = clicksPerPoint;
 
+            final long generation = runGeneration;
             Path path = new Path();
             path.moveTo(clickX, clickY);
             GestureDescription gesture = new GestureDescription.Builder()
@@ -116,13 +121,14 @@ public class AutoClickService extends AccessibilityService {
             boolean accepted = dispatchGesture(gesture, new GestureResultCallback() {
                 @Override
                 public void onCompleted(GestureDescription description) {
+                    if (generation != runGeneration) return;
                     gesturePending = false;
                     completedClicks++;
                     updateClickRate();
                     notifyStats();
                     tapsRemaining--;
 
-                    if (clicking) {
+                    if (clicking && generation == runGeneration) {
                         long slot = interval / Math.max(1, clicksPerPoint);
                         long pause = Math.max(MIN_TAP_GAP_MS,
                                 slot - GESTURE_DURATION_MS);
@@ -133,15 +139,20 @@ public class AutoClickService extends AccessibilityService {
 
                 @Override
                 public void onCancelled(GestureDescription description) {
+                    if (generation != runGeneration) return;
                     gesturePending = false;
-                    if (clicking) handler.postDelayed(clickRunnable, 30L);
+                    if (clicking && generation == runGeneration) {
+                        handler.postDelayed(clickRunnable, 30L);
+                    }
                 }
             }, handler);
 
             if (!accepted) {
                 gesturePending = false;
                 Log.w(TAG, "Android rechazó el toque; reintento pausado");
-                if (clicking) handler.postDelayed(this, 50L);
+                if (clicking && generation == runGeneration) {
+                    handler.postDelayed(this, 50L);
+                }
             }
         }
     };
