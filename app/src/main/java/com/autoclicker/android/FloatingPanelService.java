@@ -64,9 +64,9 @@ public class FloatingPanelService extends Service {
 
     private static final int MIN_PANEL_WIDTH = 200;
     private static final int MIN_PANEL_HEIGHT = 180;
-    private static final int MAX_CLICKS_PER_SECOND = 20;
+    private static final int MAX_CLICKS_PER_SECOND = 100;
     private static final int MAX_MULTI_INTERVAL = 10;
-    private static final int MIN_INTERVAL_MS = 50;
+    private static final int MIN_INTERVAL_MS = 12;
     private static final int DRAG_THRESHOLD_DP = 3;
 
     private final AutoClickService.StatsListener statsListener =
