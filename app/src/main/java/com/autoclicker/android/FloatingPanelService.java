@@ -176,6 +176,16 @@ public class FloatingPanelService extends Service {
         totalClicksLabel.setTextSize(16);
         totalClicksLabel.setText("Clics: 0");
         content.addView(totalClicksLabel);
+        Button resetCounter = new Button(this);
+        resetCounter.setText("Reset");
+        resetCounter.setTextColor(Color.GREEN);
+        resetCounter.setBackgroundColor(Color.BLACK);
+        resetCounter.setOnClickListener(v -> {
+            AutoClickService service = AutoClickService.getInstance();
+            if (service != null) service.resetStats();
+            totalClicksLabel.setText("Clics: 0");
+        });
+        content.addView(resetCounter, new LinearLayout.LayoutParams(dp(92), dp(38)));
 
         actualSpeedLabel = new TextView(this);
         actualSpeedLabel.setTextColor(Color.DKGRAY);
@@ -236,6 +246,12 @@ public class FloatingPanelService extends Service {
         content.addView(clickCountRow);
         updateClickCountButtons();
 
+        coordinateLabel = new TextView(this);
+        coordinateLabel.setTextColor(Color.CYAN);
+        coordinateLabel.setTextSize(13);
+        coordinateLabel.setText("Coordenadas   X: 300    Y: 500");
+        content.addView(coordinateLabel);
+
         configuredSpeedLabel = new TextView(this);
         configuredSpeedLabel.setTextColor(Color.BLACK);
         configuredSpeedLabel.setTextSize(15);
@@ -270,6 +286,34 @@ public class FloatingPanelService extends Service {
                     }
                 }
         );
+
+        Button fastButton = new Button(this);
+        fastButton.setText("FAST → 100 CPS");
+        fastButton.setTextColor(Color.YELLOW);
+        fastButton.setBackgroundColor(Color.BLACK);
+        fastButton.setOnClickListener(v -> setSpeed(100));
+        content.addView(fastButton, new LinearLayout.LayoutParams(-1, dp(38)));
+
+        TextView multiLabel = new TextView(this);
+        multiLabel.setTextColor(Color.YELLOW);
+        multiLabel.setText("FURIOS   Multi Interval: " + multiInterval);
+        content.addView(multiLabel);
+        SeekBar multiSeek = new SeekBar(this);
+        multiSeek.setMax(MAX_MULTI_INTERVAL - 1);
+        multiSeek.setProgress(multiInterval - 1);
+        multiSeek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                if (fromUser) {
+                    multiInterval = progress + 1;
+                    multiLabel.setText("FURIOS   Multi Interval: " + multiInterval);
+                    AutoClickService service = AutoClickService.getInstance();
+                    if (service != null) service.setInterval(cycleIntervalMs());
+                }
+            }
+            @Override public void onStartTrackingTouch(SeekBar seekBar) { }
+            @Override public void onStopTrackingTouch(SeekBar seekBar) { }
+        });
+        content.addView(multiSeek);
 
         TextView markerLabel = new TextView(this);
         markerLabel.setTextColor(Color.BLACK);
@@ -559,6 +603,12 @@ public class FloatingPanelService extends Service {
         }
     }
 
+    private String presetDots(int count, boolean selected) {
+        StringBuilder dots = new StringBuilder();
+        for (int i = 0; i < count; i++) dots.append(selected ? '●' : '•');
+        return dots.toString();
+    }
+
     private void updateClickCountButtons() {
         if (clickCountLabel != null) {
             clickCountLabel.setText("Clics por punto: " + clicksPerPoint);
@@ -569,7 +619,8 @@ public class FloatingPanelService extends Service {
         for (int i = 0; i < clickCountButtons.length; i++) {
             Button option = clickCountButtons[i];
             boolean selected = (i + 1) == clicksPerPoint;
-            option.setText(selected ? "●".repeat(i + 1) : "•".repeat(i + 1));
+            option.setText(presetDots(i + 1, selected));
+            option.setBackgroundColor(Color.BLACK);
             option.setTextColor(selected ? Color.GREEN : Color.RED);
         }
     }
@@ -817,6 +868,9 @@ public class FloatingPanelService extends Service {
         int x = markerParams.x + markerParams.width / 2;
         int y = markerParams.y + markerParams.height / 2;
 
+        if (coordinateLabel != null) {
+            coordinateLabel.setText("Coordenadas   X: " + x + "    Y: " + y);
+        }
         AutoClickService service = AutoClickService.getInstance();
         if (service != null) {
             service.setPosition(x, y);
