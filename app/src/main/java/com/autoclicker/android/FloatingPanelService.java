@@ -43,6 +43,7 @@ public class FloatingPanelService extends Service {
     private TextView actualSpeedLabel;
     private TextView configuredSpeedLabel;
     private TextView clickCountLabel;
+    private TextView statusTitle;
     private Button[] clickCountButtons;
 
     private WindowManager.LayoutParams panelParams;
@@ -141,14 +142,15 @@ public class FloatingPanelService extends Service {
         header.setGravity(Gravity.CENTER_VERTICAL);
         header.setBackgroundColor(Color.BLACK);
 
-        TextView title = new TextView(this);
-        title.setText("AUTOCLICK Desactivado");
-        title.setTextColor(Color.RED);
-        title.setTextSize(16);
-        title.setPadding(dp(8), dp(8), dp(4), dp(8));
-        title.setContentDescription("Arrastrar panel");
+        statusTitle = new TextView(this);
+        statusTitle.setText("AUTOCLICK Desactivado");
+        statusTitle.setTextColor(Color.RED);
+        statusTitle.setTextSize(16);
+        statusTitle.setTypeface(null, android.graphics.Typeface.BOLD);
+        statusTitle.setPadding(dp(8), dp(8), dp(4), dp(8));
+        statusTitle.setContentDescription("Estado y arrastre del panel");
 
-        header.addView(title, new LinearLayout.LayoutParams(
+        header.addView(statusTitle, new LinearLayout.LayoutParams(
                 0, -2, 1f
         ));
 
@@ -202,19 +204,21 @@ public class FloatingPanelService extends Service {
         clickButtons.setOrientation(LinearLayout.HORIZONTAL);
 
         Button start = new Button(this);
-        start.setText("▶");
-        start.setTextSize(22);
+        start.setText("▶ INICIAR");
+        start.setTextSize(13);
+        start.setTextColor(Color.GREEN);
         start.setContentDescription("Iniciar clics");
         clickButtons.addView(start, new LinearLayout.LayoutParams(
-                0, dp(48), 1f
+                0, dp(44), 1f
         ));
 
         Button stop = new Button(this);
-        stop.setText("■");
-        stop.setTextSize(22);
+        stop.setText("■ DETENER");
+        stop.setTextSize(13);
+        stop.setTextColor(Color.RED);
         stop.setContentDescription("Detener clics");
         clickButtons.addView(stop, new LinearLayout.LayoutParams(
-                0, dp(48), 1f
+                0, dp(44), 1f
         ));
 
         content.addView(clickButtons);
@@ -227,23 +231,28 @@ public class FloatingPanelService extends Service {
         clickCountLabel.setGravity(Gravity.CENTER);
         content.addView(clickCountLabel);
 
-        LinearLayout clickCountRow = new LinearLayout(this);
-        clickCountRow.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout clickButtonsGrid = new LinearLayout(this);
+        clickButtonsGrid.setOrientation(LinearLayout.VERTICAL);
         clickCountButtons = new Button[6];
 
-        for (int i = 0; i < clickCountButtons.length; i++) {
-            final int count = i + 1;
-            Button option = new Button(this);
-            option.setTextSize(13);
-            option.setPadding(dp(2), 0, dp(2), 0);
-            clickCountButtons[i] = option;
-            clickCountRow.addView(option, new LinearLayout.LayoutParams(
-                    0, dp(44), 1f
-            ));
-            option.setOnClickListener(v -> setClicksPerPoint(count));
+        for (int rowIndex = 0; rowIndex < 2; rowIndex++) {
+            LinearLayout clickCountRow = new LinearLayout(this);
+            clickCountRow.setOrientation(LinearLayout.HORIZONTAL);
+            for (int columnIndex = 0; columnIndex < 3; columnIndex++) {
+                final int count = rowIndex * 3 + columnIndex + 1;
+                Button option = new Button(this);
+                option.setTextSize(13);
+                option.setPadding(dp(2), 0, dp(2), 0);
+                clickCountButtons[count - 1] = option;
+                clickCountRow.addView(option, new LinearLayout.LayoutParams(
+                        0, dp(42), 1f
+                ));
+                option.setOnClickListener(v -> setClicksPerPoint(count));
+            }
+            clickButtonsGrid.addView(clickCountRow);
         }
 
-        content.addView(clickCountRow);
+        content.addView(clickButtonsGrid);
         updateClickCountButtons();
 
         coordinateLabel = new TextView(this);
@@ -316,7 +325,7 @@ public class FloatingPanelService extends Service {
         content.addView(multiSeek);
 
         TextView markerLabel = new TextView(this);
-        markerLabel.setTextColor(Color.BLACK);
+        markerLabel.setTextColor(Color.WHITE);
         markerLabel.setText("Tamaño del anillo");
         content.addView(markerLabel);
 
@@ -405,6 +414,7 @@ public class FloatingPanelService extends Service {
         service.setClicksPerPoint(clicksPerPoint);
         service.setInterval(cycleIntervalMs());
         service.startClicks();
+        updatePanelStatus(true);
 
         setMarkerTouchable(false);
 
@@ -418,12 +428,20 @@ public class FloatingPanelService extends Service {
         if (service != null) {
             service.stopClicks();
         }
+        updatePanelStatus(false);
 
         setMarkerTouchable(true);
 
         Toast.makeText(
                 this, "Clics detenidos", Toast.LENGTH_SHORT
         ).show();
+    }
+
+    private void updatePanelStatus(boolean running) {
+        if (statusTitle != null) {
+            statusTitle.setText(running ? "AUTOCLICK Activado" : "AUTOCLICK Desactivado");
+            statusTitle.setTextColor(running ? Color.GREEN : Color.RED);
+        }
     }
 
     private void setMarkerTouchable(boolean touchable) {
