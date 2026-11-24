@@ -52,8 +52,10 @@ public class FloatingPanelService extends Service {
     private int markerSize = 48;
     private int clicksPerSecond = 90;
     private int clicksPerPoint = 1;
-    private int panelWidth = 300;
-    private int panelHeight = 440;
+    private int multiInterval = 1;
+    private TextView coordinateLabel;
+    private int panelWidth = 360;
+    private int panelHeight = 320;
     private int screenWidth;
     private int screenHeight;
 
@@ -62,6 +64,7 @@ public class FloatingPanelService extends Service {
     private static final int MIN_PANEL_WIDTH = 200;
     private static final int MIN_PANEL_HEIGHT = 180;
     private static final int MAX_CLICKS_PER_SECOND = 100;
+    private static final int MAX_MULTI_INTERVAL = 10;
     private static final int MIN_INTERVAL_MS = 12;
     private static final int DRAG_THRESHOLD_DP = 3;
 
@@ -129,17 +132,18 @@ public class FloatingPanelService extends Service {
     private void createPanel(int type) {
         panel = new LinearLayout(this);
         panel.setOrientation(LinearLayout.VERTICAL);
-        panel.setPadding(dp(8), dp(8), dp(8), dp(4));
+        panel.setPadding(dp(6), dp(6), dp(6), dp(4));
+        panel.setBackgroundColor(Color.BLACK);
         panel.setBackground(createPanelBackground());
 
         LinearLayout header = new LinearLayout(this);
         header.setOrientation(LinearLayout.HORIZONTAL);
         header.setGravity(Gravity.CENTER_VERTICAL);
-        header.setBackgroundColor(Color.rgb(240, 240, 240));
+        header.setBackgroundColor(Color.BLACK);
 
         TextView title = new TextView(this);
-        title.setText("Scg-92 AutoClickerBB");
-        title.setTextColor(Color.BLACK);
+        title.setText("AUTOCILCK Desactivado");
+        title.setTextColor(Color.RED);
         title.setTextSize(16);
         title.setPadding(dp(8), dp(8), dp(4), dp(8));
         title.setContentDescription("Arrastrar panel");
@@ -215,7 +219,7 @@ public class FloatingPanelService extends Service {
 
         LinearLayout clickCountRow = new LinearLayout(this);
         clickCountRow.setOrientation(LinearLayout.HORIZONTAL);
-        clickCountButtons = new Button[3];
+        clickCountButtons = new Button[6];
 
         for (int i = 0; i < clickCountButtons.length; i++) {
             final int count = i + 1;
@@ -420,9 +424,9 @@ public class FloatingPanelService extends Service {
         miniBubble.setPadding(dp(4), dp(2), dp(4), dp(2));
 
         GradientDrawable background = new GradientDrawable();
-        background.setColor(Color.argb(225, 25, 35, 55));
-        background.setCornerRadius(dp(30));
-        background.setStroke(dp(2), Color.rgb(40, 130, 255));
+        background.setColor(Color.BLACK);
+        background.setCornerRadius(dp(8));
+        background.setStroke(dp(2), Color.GREEN);
         miniBubble.setBackground(background);
 
         TextView dragHandle = new TextView(this);
@@ -545,7 +549,7 @@ public class FloatingPanelService extends Service {
     }
 
     private void setClicksPerPoint(int count) {
-        clicksPerPoint = clamp(count, 1, 3);
+        clicksPerPoint = clamp(count, 1, 6);
         updateClickCountButtons();
 
         AutoClickService service = AutoClickService.getInstance();
@@ -565,8 +569,8 @@ public class FloatingPanelService extends Service {
         for (int i = 0; i < clickCountButtons.length; i++) {
             Button option = clickCountButtons[i];
             boolean selected = (i + 1) == clicksPerPoint;
-            option.setText(selected ? "✓ " + (i + 1) : String.valueOf(i + 1));
-            option.setTextColor(selected ? Color.rgb(0, 110, 50) : Color.BLACK);
+            option.setText(selected ? "●".repeat(i + 1) : "•".repeat(i + 1));
+            option.setTextColor(selected ? Color.GREEN : Color.RED);
         }
     }
 
@@ -595,9 +599,8 @@ public class FloatingPanelService extends Service {
     }
 
     private long cycleIntervalMs() {
-        // Limita la carga total: los modos 2 y 3 reparten el mismo CPS entre toques separados.
         long interval = (1000L * clicksPerPoint) / Math.max(1, clicksPerSecond);
-        return Math.max(MIN_INTERVAL_MS * clicksPerPoint, interval);
+        return Math.max(MIN_INTERVAL_MS * clicksPerPoint, interval) * multiInterval;
     }
 
     private void updateConfiguredSpeedLabel() {
@@ -610,9 +613,9 @@ public class FloatingPanelService extends Service {
 
     private GradientDrawable createPanelBackground() {
         GradientDrawable fallback = new GradientDrawable();
-        fallback.setColor(Color.rgb(24, 43, 54));
-        fallback.setCornerRadius(dp(8));
-        fallback.setStroke(dp(2), Color.rgb(40, 130, 160));
+        fallback.setColor(Color.BLACK);
+        fallback.setCornerRadius(dp(5));
+        fallback.setStroke(dp(2), Color.rgb(0, 190, 0));
         loadRingBackgroundImage();
         return fallback;
     }
